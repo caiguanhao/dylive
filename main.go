@@ -51,7 +51,7 @@ func get(url string) error {
 	if url == "" {
 		return errorNoUrl
 	}
-	fmt.Println(strings.TrimSpace(url)) // print url to stdout
+	fmt.Print(strings.TrimSpace(url)) // print url to stdout
 	return nil
 }
 
