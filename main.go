@@ -23,7 +23,15 @@ const (
 func main() {
 	text, _ := ioutil.ReadAll(os.Stdin)
 	re := regexp.MustCompile(`https?://v\.douyin\.com/([A-Za-z0-9]+)/`)
-	if err := get(re.FindString(string(text))); err != nil {
+	url := re.FindString(string(text))
+	if url == "" {
+		re = regexp.MustCompile(`[A-Za-z0-9]{7}`)
+		url = re.FindString(string(text))
+		if url != "" {
+			url = "https://v.douyin.com/" + url + "/"
+		}
+	}
+	if err := get(url); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

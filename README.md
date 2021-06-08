@@ -1,6 +1,8 @@
 # dylive
 
-Get Douyin Live URL from URL in the "Share Live" message.
+Get Douyin live stream URL from the live stream sharing message.
+
+With live stream URLs, you can watch multiple Douyin live streams on your computer.
 
 ## Install
 
@@ -19,6 +21,8 @@ Paste the link to dylive, for example, on Mac:
 ```
 pbpaste | dylive | pbcopy
 ```
+
+Alternatively, you can run `dylive` and type the URL or just the ID in the URL (`https://v.douyin.com/(id)/`).
 
 And you will get a link looks like:
 
