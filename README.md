@@ -32,6 +32,12 @@ Open this link in video player like QuickTime Player or VLC and you will watch t
 
 <img src="https://user-images.githubusercontent.com/1284703/121235401-6c8a9280-c8c7-11eb-947a-6d3d0476ad2b.png" width="400" />
 
+You can use [streamlink](https://streamlink.github.io/) to download the live stream while watching it.
+
+```
+streamlink -r video.ts $(pbpaste | dylive) best
+```
+
 Alternatively, you can run `dylive` and type the URL or just the ID in the URL (`https://v.douyin.com/(id)/`).
 
 After entering URL or ID, press Ctrl-Z and Enter (Windows) or Ctrl-D (Mac or Linux) to finish.
