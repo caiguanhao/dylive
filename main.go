@@ -13,6 +13,10 @@ import (
 
 var (
 	errorNoUrl = errors.New("No URL found")
+
+	reShareUrl  = regexp.MustCompile(`https?://v\.douyin\.com/([A-Za-z0-9]{7,})/`)
+	reRoomIdStr = regexp.MustCompile(`[A-Za-z0-9]{7,}`)
+	reRoomIdNum = regexp.MustCompile(`[0-9]{18,}`)
 )
 
 const (
@@ -22,19 +26,24 @@ const (
 
 func main() {
 	text, _ := ioutil.ReadAll(os.Stdin)
-	re := regexp.MustCompile(`https?://v\.douyin\.com/([A-Za-z0-9]+)/`)
-	url := re.FindString(string(text))
-	if url == "" {
-		re = regexp.MustCompile(`[A-Za-z0-9]{7}`)
-		url = re.FindString(string(text))
-		if url != "" {
-			url = "https://v.douyin.com/" + url + "/"
-		}
-	}
+	url := parseInput(string(text))
 	if err := get(url); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func parseInput(input string) string {
+	if url := reShareUrl.FindString(input); url != "" {
+		return url
+	}
+	if id := reRoomIdNum.FindString(input); id != "" {
+		return "https://webcast.amemv.com/webcast/reflow/" + id
+	}
+	if id := reRoomIdStr.FindString(input); id != "" {
+		return "https://v.douyin.com/" + id + "/"
+	}
+	return ""
 }
 
 func get(url string) error {
