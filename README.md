@@ -3,6 +3,11 @@
 Get live stream m3u8 URL from Douyin share messages and monitor users for new
 live broadcasts.
 
+You can:
+- Watch (multiple) Douyin HD live streams on computer (without phone)
+- Write your own script and get notified (or start recording) once new live
+  stream is started
+
 ## Install
 
 ```
@@ -38,4 +43,10 @@ Monitor list of users. Once one of them starts new live stream, opens new mpv wi
 ```
 # it's OK to just use ID in the URLs
 dylive exJ1CqY exJk92q | xargs -n 1 -I X open -na mpv X --args --autofit="50%" 
+```
+
+## API
+
+```go
+import "github.com/caiguanhao/dylive/douyinapi"
 ```
