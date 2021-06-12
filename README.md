@@ -1,8 +1,7 @@
 # dylive
 
-Get Douyin live stream URL from the live stream sharing message.
-
-With live stream URLs, you can watch multiple Douyin live streams on your computer.
+Get live stream m3u8 URL from Douyin share messages and monitor users for new
+live broadcasts.
 
 ## Install
 
@@ -12,36 +11,31 @@ go get -v -u github.com/caiguanhao/dylive
 
 ## Usage
 
-In any live room, click Share and select Copy Link (复制链接).
+### Watch Live Stream
 
-<img src="https://user-images.githubusercontent.com/1284703/121233565-554aa580-c8c5-11eb-97bf-28f25d96057c.jpg" width="400" />
+In any live stream room, click Share (分享) and select Copy Link (复制链接).
 
-Paste the link to dylive, for example, on Mac:
+<img src="https://user-images.githubusercontent.com/1284703/121233565-554aa580-c8c5-11eb-97bf-28f25d96057c.jpg" width="300" />
 
-```
-pbpaste | dylive | pbcopy
-```
-
-And you will get a link looks like:
+For example, on macOS, paste the link to dylive and launch mpv:
 
 ```
-http://pull-hls-f11.douyincdn.com/third/stream-000000000000000000.m3u8
+pbpaste | dylive | xargs open -na mpv
 ```
-
-Open this link in video player like QuickTime Player or VLC and you will watch the HD live on your computer.
-
-<img src="https://user-images.githubusercontent.com/1284703/121235401-6c8a9280-c8c7-11eb-947a-6d3d0476ad2b.png" width="400" />
 
 You can use [streamlink](https://streamlink.github.io/) to download the live stream while watching it.
 
 ```
-streamlink -r video.ts $(pbpaste | dylive) best
+dylive https://v.douyin.com/exdfyjt/ | xargs -I X streamlink --player /Applications/mpv.app/Contents/MacOS/mpv -r video.ts X best
 ```
 
-Alternatively, you can run `dylive` and type the URL or just the ID in the URL (`https://v.douyin.com/(id)/`).
+### Wait User's Live Stream
 
-After entering URL or ID, press Ctrl-Z and Enter (Windows) or Ctrl-D (Mac or Linux) to finish.
+In any user profile page, click Share (分享主页) and select Copy Link (复制链接).
 
-Also works on Windows:
+Monitor list of users. Once one of them starts new live stream, opens new mpv window:
 
-<img src="https://user-images.githubusercontent.com/1284703/121242020-a6ab6280-c8ce-11eb-8db6-bc4385ffc017.png" width="400" />
+```
+# it's OK to just use ID in the URLs
+dylive exJ1CqY exJk92q | xargs -n 1 -I X open -na mpv X --args --autofit="50%" 
+```

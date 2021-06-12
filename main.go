@@ -1,100 +1,129 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
-	"net/http"
+	"log"
 	"os"
-	"regexp"
+	"strconv"
 	"strings"
-)
+	"time"
 
-var (
-	errorNoUrl = errors.New("No URL found")
-
-	reShareUrl  = regexp.MustCompile(`https?://v\.douyin\.com/([A-Za-z0-9]{7,})/`)
-	reRoomIdStr = regexp.MustCompile(`[A-Za-z0-9]{7,}`)
-	reRoomIdNum = regexp.MustCompile(`[0-9]{18,}`)
-)
-
-const (
-	scriptOpen  = "<script>window.__INIT_PROPS__ = "
-	scriptClose = "</script>"
+	"github.com/caiguanhao/dylive/douyinapi"
 )
 
 func main() {
-	text, _ := ioutil.ReadAll(os.Stdin)
-	url := parseInput(string(text))
-	if err := get(url); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
+	deviceIdStr := flag.String("device", "66178590413", "device ID")
+	durationStr := flag.String("duration", "5s",
+		"check user live stream for every duration (ms, s, m, h), "+
+			"must not be less than 1 second")
+	verbose := flag.Bool("verbose", false, "verbosive")
+	flag.Usage = func() {
+		fmt.Println("Usage of dylive [OPTIONS] [URL|ID]")
+		fmt.Println(`
+  This utility reads Douyin's share URLs from standard input (if no arguments
+  provided) and writes live stream URLs (.m3u8) to standard output.
 
-func parseInput(input string) string {
-	if url := reShareUrl.FindString(input); url != "" {
-		return url
-	}
-	if id := reRoomIdNum.FindString(input); id != "" {
-		return "https://webcast.amemv.com/webcast/reflow/" + id
-	}
-	if id := reRoomIdStr.FindString(input); id != "" {
-		return "https://v.douyin.com/" + id + "/"
-	}
-	return ""
-}
+  In any live stream room, click "Share" and copy the share message.
 
-func get(url string) error {
-	if url == "" {
-		return errorNoUrl
-	}
-	req, err := http.NewRequest("GET", url, nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1")
-	if err != nil {
-		return err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	url = getUrl(string(b))
-	if url == "" {
-		return errorNoUrl
-	}
-	fmt.Print(strings.TrimSpace(url)) // print url to stdout
-	return nil
-}
+  In any user profile page, click "Share" and copy the share message.
+  Once user starts new live stream room, URL is written.
 
-func getUrl(html string) string {
-	i := strings.Index(html, scriptOpen)
-	if i > -1 {
-		html = html[i+len(scriptOpen):]
+  Example:
+
+    dylive exJ1CqY exJk92q | xargs -n 1 open -na mpv`)
+		fmt.Println()
+		flag.PrintDefaults()
 	}
-	i = strings.Index(html, scriptClose)
-	html = html[:i]
-	var obj map[string]map[string]map[string]map[string]map[string]string
-	json.Unmarshal([]byte(html), &obj)
-	var out string
-	for _, v := range obj {
-		urlMap := v["room"]["stream_url"]["hls_pull_url_map"]
-		if url := urlMap["FULL_HD1"]; url != "" {
-			out = url
-		} else if url := urlMap["HD1"]; url != "" {
-			out = url
+	flag.Parse()
+
+	douyinapi.Verbose = *verbose
+
+	duration, err := time.ParseDuration(*durationStr)
+	if err != nil || duration.Seconds() < 1 {
+		log.Fatalln("invalid duration")
+	}
+
+	deviceId, err := strconv.ParseUint(*deviceIdStr, 10, 64)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	var text string
+	if len(flag.Args()) == 0 {
+		b, _ := ioutil.ReadAll(os.Stdin)
+		text = string(b)
+	} else {
+		text = strings.Join(flag.Args(), "\n")
+	}
+
+	var userIds []uint64
+
+	for {
+		url, str := douyinapi.GetPageUrlStr(text)
+		if url == "" {
+			break
 		}
-		for key, url := range urlMap {
-			fmt.Fprintln(os.Stderr, key, url)
-			if out == "" {
-				out = url
+		text = text[strings.Index(text, str)+len(str):]
+		userId, roomId, _ := douyinapi.GetIdFromUrl(url)
+
+		if userId > 0 {
+			userIds = append(userIds, userId)
+		} else if roomId > 0 {
+			urlMap, err := douyinapi.GetLiveUrlFromRoomId(roomId)
+			if err != nil {
+				log.Println(err)
+				continue
 			}
+			liveStreamUrl := getLiveStreamUrl(roomId, urlMap)
+			fmt.Println(liveStreamUrl)
 		}
 	}
-	return out
+
+	if len(userIds) == 0 {
+		return
+	}
+
+	names := map[uint64]string{}
+	roomIds := map[uint64]uint64{}
+	for {
+		for _, userId := range userIds {
+			user, err := douyinapi.GetUserInfo(deviceId, userId)
+			if user != nil && names[user.Id] != user.Name {
+				log.Println("checking live stream of user:", user.Id, user.Name)
+				names[user.Id] = user.Name
+			}
+			if user == nil || user.RoomId == 0 {
+				continue
+			}
+			if roomIds[user.Id] == user.RoomId {
+				continue
+			}
+			urlMap, err := douyinapi.GetLiveUrlFromRoomId(user.RoomId)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			liveStreamUrl := getLiveStreamUrl(user.RoomId, urlMap)
+			fmt.Println(liveStreamUrl)
+			roomIds[userId] = user.RoomId
+		}
+		time.Sleep(duration)
+	}
+}
+
+func getLiveStreamUrl(roomId uint64, urlMap map[string]string) (out string) {
+	if url := urlMap["FULL_HD1"]; url != "" {
+		out = url
+	} else if url := urlMap["HD1"]; url != "" {
+		out = url
+	}
+	for key, url := range urlMap {
+		log.Println(roomId, key, url)
+		if out == "" {
+			out = url
+		}
+	}
+	return
 }
