@@ -50,3 +50,5 @@ dylive exJ1CqY exJk92q | xargs -n 1 -I X open -na mpv X --args --autofit="50%"
 ```go
 import "github.com/caiguanhao/dylive/douyinapi"
 ```
+
+Docs: <https://pkg.go.dev/github.com/caiguanhao/dylive/douyinapi>
