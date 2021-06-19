@@ -18,7 +18,7 @@ func TestGetIdFromUrl(t *testing.T) {
 	if userId != 94792729333 {
 		t.Error("wrong user id", userId)
 	}
-	user, _ := GetUserInfo(66178590413, userId)
+	user, _ := GetUserInfo(DefaultDeviceId, userId)
 	if user == nil {
 		t.Error("user should not be nil")
 	} else {
