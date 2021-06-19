@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -27,6 +28,7 @@ func main() {
 	durationStr := flag.String("duration", "5s",
 		"check user live stream for every duration (ms, s, m, h), "+
 			"must not be less than 1 second")
+	jsonOutput := flag.Bool("json", false, "standard output uses json")
 	verbose := flag.Bool("verbose", false, "verbosive")
 	flag.Usage = func() {
 		fmt.Println("Usage of dylive [OPTIONS] [URL|ID]")
@@ -87,13 +89,20 @@ func main() {
 			userIds = append(userIds, userId)
 			userMap[userId] = str
 		} else if roomId > 0 {
-			urlMap, err := douyinapi.GetLiveUrlFromRoomId(roomId)
+			room, err := douyinapi.GetRoom(roomId)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
-			liveStreamUrl := getLiveStreamUrl(roomId, urlMap)
-			fmt.Println(liveStreamUrl)
+			liveStreamUrl := getLiveStreamUrl(room, !*jsonOutput)
+			if *jsonOutput {
+				json.NewEncoder(os.Stdout).Encode(struct {
+					*douyinapi.Room
+					LiveStreamUrl string
+				}{room, liveStreamUrl})
+			} else {
+				fmt.Println(liveStreamUrl)
+			}
 		}
 	}
 
@@ -143,27 +152,37 @@ outer:
 			if roomIds[user.Id] == user.RoomId {
 				continue
 			}
-			urlMap, err := douyinapi.GetLiveUrlFromRoomId(user.RoomId)
+			room, err := douyinapi.GetRoom(user.RoomId)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
-			liveStreamUrl := getLiveStreamUrl(user.RoomId, urlMap)
-			fmt.Println(liveStreamUrl)
+			liveStreamUrl := getLiveStreamUrl(room, !*jsonOutput)
+			if *jsonOutput {
+				room.User = user
+				json.NewEncoder(os.Stdout).Encode(struct {
+					*douyinapi.Room
+					LiveStreamUrl string
+				}{room, liveStreamUrl})
+			} else {
+				fmt.Println(liveStreamUrl)
+			}
 			roomIds[userId] = user.RoomId
 		}
 		time.Sleep(duration)
 	}
 }
 
-func getLiveStreamUrl(roomId uint64, urlMap map[string]string) (out string) {
-	if url := urlMap["FULL_HD1"]; url != "" {
+func getLiveStreamUrl(room *douyinapi.Room, printUrl bool) (out string) {
+	if url := room.StreamHlsUrlMap["FULL_HD1"]; url != "" {
 		out = url
-	} else if url := urlMap["HD1"]; url != "" {
+	} else if url := room.StreamHlsUrlMap["HD1"]; url != "" {
 		out = url
 	}
-	for key, url := range urlMap {
-		log.Println(roomId, key, url)
+	for key, url := range room.StreamHlsUrlMap {
+		if printUrl {
+			log.Println(room.Id, key, url)
+		}
 		if out == "" {
 			out = url
 		}
