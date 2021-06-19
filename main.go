@@ -13,12 +13,17 @@ import (
 	"github.com/caiguanhao/dylive/douyinapi"
 )
 
+var (
+	DefaultDeviceId = douyinapi.DefaultDeviceId
+)
+
 func main() {
 	numberOfDeviceIds := flag.Int("n", 0, "enumerate and print working device ids "+
 		"starting from -device until number of ids are found")
 	disableAutoGetOne := flag.Bool("N", false, "exit if device is not working, "+
 		"do not try to get one automatically")
-	deviceIdStr := flag.String("device", "66178590526", "device ID")
+	deviceIdStr := flag.String("device", strconv.FormatUint(DefaultDeviceId, 10),
+		"try to use this device ID and then the default one")
 	durationStr := flag.String("duration", "5s",
 		"check user live stream for every duration (ms, s, m, h), "+
 			"must not be less than 1 second")
@@ -99,27 +104,37 @@ func main() {
 	names := map[uint64]string{}
 	roomIds := map[uint64]uint64{}
 	failed := 0
+	defaultTried := deviceId == DefaultDeviceId
+outer:
 	for {
 		for _, userId := range userIds {
 			user, err := douyinapi.GetUserInfo(deviceId, userId)
 			if user != nil && names[user.Id] != user.Name {
-				log.Printf("checking live stream of user: %d (%s) %s", user.Id, userMap[user.Id], user.Name)
+				log.Printf("checking live stream of user: %d (%s) %s for every %s",
+					user.Id, userMap[user.Id], user.Name, duration)
 				names[user.Id] = user.Name
 			}
 			if user == nil {
 				failed += 1
 				if failed > 1 {
-					if *disableAutoGetOne {
-						log.Fatalln(`fatal: device id is not working, you can use "-n 1" to get one`)
+					if !defaultTried {
+						log.Printf("device id %d is not working, "+
+							"trying the default one", deviceId)
+						deviceId = DefaultDeviceId
+						defaultTried = true
+					} else if *disableAutoGetOne {
+						log.Fatalf("fatal: device id %d is not working, "+
+							`you can use "dylive -n 1" to get one`, deviceId)
 					} else {
-						log.Println("device id is not working, trying to get new one")
+						log.Printf("device id %d is not working, trying new device id", deviceId)
 						deviceIds := enumerateDeviceId(deviceId, 1, false)
 						deviceId = deviceIds[0]
 						log.Printf("you should update your command like this: "+
 							`"alias dylive='dylive -device %d'"`, deviceId)
 					}
 				}
-				continue
+				time.Sleep(1 * time.Second)
+				continue outer
 			}
 			failed = 0
 			if user.RoomId == 0 {

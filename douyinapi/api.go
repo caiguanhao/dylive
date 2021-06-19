@@ -14,8 +14,15 @@ import (
 )
 
 var (
+	// If you don't have device ID, use this. It will become unusable after
+	// a while and can be updated frequently. You can enumerate to find a
+	// new one, starting from this number.
+	DefaultDeviceId uint64 = 66178590526
+
+	// Timeout for all HTTP requests.
 	HttpTimeout = 5 * time.Second
 
+	// Print URL or error.
 	Verbose = false
 
 	ErrorNoUrl = errors.New("No URL found")
@@ -65,6 +72,7 @@ func GetPageUrl(input string) string {
 	return url
 }
 
+// Just like GetPageUrl, but also returns the matching string.
 func GetPageUrlStr(input string) (string, string) {
 	if url := reShareUrl.FindString(input); url != "" {
 		return url, url
@@ -154,7 +162,7 @@ func getUserInfo(deviceId, userId uint64) (user *User, err error) {
 	return
 }
 
-// Get live stream URL of a page URL.
+// Get live stream URL by room ID.
 func GetLiveUrlFromRoomId(roomId uint64) (urlMap map[string]string, err error) {
 	return GetLiveUrlFromUrl("https://webcast.amemv.com/webcast/reflow/" + strconv.FormatUint(roomId, 10))
 }

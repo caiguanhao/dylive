@@ -47,10 +47,12 @@ dylive exJ1CqY exJk92q | xargs -n 1 -I X open -na mpv X --args --autofit="50%"
 
 ## Device ID
 
-Device ID is a number required by the Douyin's API and will become unusable after a while.
-By default, the `dylive` command will automatically get one if it is not working.
+Device ID is a number required by the Douyin's user-related APIs and will
+become unusable after a while. By default, the `dylive` command will
+automatically get one if it is not working. You can get your own device ID if
+you know how to [intercept](https://mitmproxy.org/) your Douyin requests.
 
-You can also use `dylive -n 1` to directly get one.
+You can use `dylive -n 1` to directly get one.
 
 ## API
 
