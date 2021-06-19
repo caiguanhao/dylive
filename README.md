@@ -45,6 +45,13 @@ Monitor list of users. Once one of them starts new live stream, opens new mpv wi
 dylive exJ1CqY exJk92q | xargs -n 1 -I X open -na mpv X --args --autofit="50%" 
 ```
 
+## Device ID
+
+Device ID is a number required by the Douyin's API and will become unusable after a while.
+By default, the `dylive` command will automatically get one if it is not working.
+
+You can also use `dylive -n 1` to directly get one.
+
 ## API
 
 ```go

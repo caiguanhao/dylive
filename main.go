@@ -14,7 +14,11 @@ import (
 )
 
 func main() {
-	deviceIdStr := flag.String("device", "66178590413", "device ID")
+	numberOfDeviceIds := flag.Int("n", 0, "enumerate and print working device ids "+
+		"starting from -device until number of ids are found")
+	disableAutoGetOne := flag.Bool("N", false, "exit if device is not working, "+
+		"do not try to get one automatically")
+	deviceIdStr := flag.String("device", "66178590526", "device ID")
 	durationStr := flag.String("duration", "5s",
 		"check user live stream for every duration (ms, s, m, h), "+
 			"must not be less than 1 second")
@@ -40,14 +44,19 @@ func main() {
 
 	douyinapi.Verbose = *verbose
 
-	duration, err := time.ParseDuration(*durationStr)
-	if err != nil || duration.Seconds() < 1 {
-		log.Fatalln("invalid duration")
-	}
-
 	deviceId, err := strconv.ParseUint(*deviceIdStr, 10, 64)
 	if err != nil {
 		log.Fatalln(err)
+	}
+
+	if *numberOfDeviceIds > 0 {
+		enumerateDeviceId(deviceId, *numberOfDeviceIds, true)
+		return
+	}
+
+	duration, err := time.ParseDuration(*durationStr)
+	if err != nil || duration.Seconds() < 1 {
+		log.Fatalln("invalid duration")
 	}
 
 	var text string
@@ -59,6 +68,7 @@ func main() {
 	}
 
 	var userIds []uint64
+	userMap := map[uint64]string{}
 
 	for {
 		url, str := douyinapi.GetPageUrlStr(text)
@@ -70,6 +80,7 @@ func main() {
 
 		if userId > 0 {
 			userIds = append(userIds, userId)
+			userMap[userId] = str
 		} else if roomId > 0 {
 			urlMap, err := douyinapi.GetLiveUrlFromRoomId(roomId)
 			if err != nil {
@@ -87,14 +98,31 @@ func main() {
 
 	names := map[uint64]string{}
 	roomIds := map[uint64]uint64{}
+	failed := 0
 	for {
 		for _, userId := range userIds {
 			user, err := douyinapi.GetUserInfo(deviceId, userId)
 			if user != nil && names[user.Id] != user.Name {
-				log.Println("checking live stream of user:", user.Id, user.Name)
+				log.Printf("checking live stream of user: %d (%s) %s", user.Id, userMap[user.Id], user.Name)
 				names[user.Id] = user.Name
 			}
-			if user == nil || user.RoomId == 0 {
+			if user == nil {
+				failed += 1
+				if failed > 1 {
+					if *disableAutoGetOne {
+						log.Fatalln(`fatal: device id is not working, you can use "-n 1" to get one`)
+					} else {
+						log.Println("device id is not working, trying to get new one")
+						deviceIds := enumerateDeviceId(deviceId, 1, false)
+						deviceId = deviceIds[0]
+						log.Printf("you should update your command like this: "+
+							`"alias dylive='dylive -device %d'"`, deviceId)
+					}
+				}
+				continue
+			}
+			failed = 0
+			if user.RoomId == 0 {
 				continue
 			}
 			if roomIds[user.Id] == user.RoomId {
@@ -124,6 +152,26 @@ func getLiveStreamUrl(roomId uint64, urlMap map[string]string) (out string) {
 		if out == "" {
 			out = url
 		}
+	}
+	return
+}
+
+func enumerateDeviceId(from uint64, count int, printId bool) (out []uint64) {
+	var i uint64
+	var found int
+	for found < count {
+		id := from + i
+		log.Println("checking", id)
+		user, _ := douyinapi.GetUserInfo(id, 2128250633728555)
+		if user != nil {
+			log.Println("found working device id", id)
+			if printId {
+				fmt.Println(id)
+			}
+			out = append(out, id)
+			found += 1
+		}
+		i += 1
 	}
 	return
 }
