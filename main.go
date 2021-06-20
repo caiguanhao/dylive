@@ -1,14 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/caiguanhao/dylive/douyinapi"
@@ -29,6 +32,7 @@ func main() {
 		"check user live stream for every duration (ms, s, m, h), "+
 			"must not be less than 1 second")
 	jsonOutput := flag.Bool("json", false, "standard output uses json")
+	executeCommand := flag.String("exec", "", "command to execute for every live stream")
 	verbose := flag.Bool("verbose", false, "verbosive")
 	flag.Usage = func() {
 		fmt.Println("Usage of dylive [OPTIONS] [URL|ID]")
@@ -60,6 +64,14 @@ func main() {
 	if *numberOfDeviceIds > 0 {
 		enumerateDeviceId(deviceId, *numberOfDeviceIds, true)
 		return
+	}
+
+	var commandTemplate *template.Template
+	if *executeCommand != "" {
+		commandTemplate, err = template.New("").Parse(*executeCommand)
+		if err != nil {
+			log.Fatalln(err)
+		}
 	}
 
 	duration, err := time.ParseDuration(*durationStr)
@@ -95,15 +107,7 @@ func main() {
 				log.Println(err)
 				continue
 			}
-			liveStreamUrl := getLiveStreamUrl(room, !*jsonOutput)
-			if *jsonOutput {
-				json.NewEncoder(os.Stdout).Encode(struct {
-					*douyinapi.Room
-					LiveStreamUrl string
-				}{room, liveStreamUrl})
-			} else {
-				fmt.Println(liveStreamUrl)
-			}
+			output(room, *jsonOutput, commandTemplate)
 		}
 	}
 
@@ -163,37 +167,54 @@ outer:
 				log.Println(err)
 				continue
 			}
-			liveStreamUrl := getLiveStreamUrl(room, !*jsonOutput)
-			if *jsonOutput {
-				room.User = user
-				json.NewEncoder(os.Stdout).Encode(struct {
-					*douyinapi.Room
-					LiveStreamUrl string
-				}{room, liveStreamUrl})
-			} else {
-				fmt.Println(liveStreamUrl)
-			}
+			room.User = user
+			output(room, *jsonOutput, commandTemplate)
 			roomIds[userId] = user.RoomId
 		}
 		time.Sleep(duration)
 	}
 }
 
-func getLiveStreamUrl(room *douyinapi.Room, printUrl bool) (out string) {
+func output(room *douyinapi.Room, usesJson bool, commandTemplate *template.Template) {
+	var liveStreamUrl string
 	if url := room.StreamHlsUrlMap["FULL_HD1"]; url != "" {
-		out = url
+		liveStreamUrl = url
 	} else if url := room.StreamHlsUrlMap["HD1"]; url != "" {
-		out = url
+		liveStreamUrl = url
 	}
 	for key, url := range room.StreamHlsUrlMap {
-		if printUrl {
+		if !usesJson {
 			log.Println(room.Id, key, url)
 		}
-		if out == "" {
-			out = url
+		if liveStreamUrl == "" {
+			liveStreamUrl = url
 		}
 	}
-	return
+	obj := struct {
+		*douyinapi.Room
+		LiveStreamUrl string
+	}{room, liveStreamUrl}
+	if usesJson {
+		json.NewEncoder(os.Stdout).Encode(obj)
+	} else {
+		fmt.Println(liveStreamUrl)
+	}
+	if commandTemplate != nil {
+		var buf bytes.Buffer
+		err := commandTemplate.Execute(&buf, obj)
+		if err == nil {
+			parts := strings.Fields(buf.String())
+			if len(parts) > 0 {
+				cmd := exec.Command(parts[0], parts[1:]...)
+				cmd.Stdout = os.Stderr
+				cmd.Stderr = os.Stderr
+				log.Println("starting", cmd)
+				cmd.Start()
+			}
+		} else {
+			log.Println(err)
+		}
+	}
 }
 
 func enumerateDeviceId(from uint64, count int, printId bool) (out []uint64) {
