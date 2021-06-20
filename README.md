@@ -32,6 +32,9 @@ You can use [streamlink](https://streamlink.github.io/) to download the live str
 
 ```
 dylive https://v.douyin.com/exdfyjt/ | xargs -I X streamlink --player /Applications/mpv.app/Contents/MacOS/mpv -r video.ts X best
+
+# or use the -exec option (especially useful for Windows)
+dylive -exec "streamlink --player mpv -r video.ts {{.LiveStreamUrl}} best" exdgtjK
 ```
 
 ### Wait User's Live Stream

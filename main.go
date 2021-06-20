@@ -23,16 +23,17 @@ var (
 
 func main() {
 	numberOfDeviceIds := flag.Int("n", 0, "enumerate and print working device ids "+
-		"starting from -device until number of ids are found")
+		"starting from -device\nuntil number of ids are found")
 	disableAutoGetOne := flag.Bool("N", false, "exit if device is not working, "+
 		"do not try to get one automatically")
 	deviceIdStr := flag.String("device", strconv.FormatUint(DefaultDeviceId, 10),
-		"try to use this device ID and then the default one")
+		"use this device ID and then the default one")
 	durationStr := flag.String("duration", "5s",
-		"check user live stream for every duration (ms, s, m, h), "+
+		"check user live stream for every duration (ms, s, m, h),\n"+
 			"must not be less than 1 second")
 	jsonOutput := flag.Bool("json", false, "standard output uses json")
-	executeCommand := flag.String("exec", "", "command to execute for every live stream")
+	executeCommand := flag.String("exec", "", "command to execute for every live stream,\n"+
+		"use -json to see list of usable variables like {{.LiveStreamUrl}}")
 	verbose := flag.Bool("verbose", false, "verbosive")
 	flag.Usage = func() {
 		fmt.Println("Usage of dylive [OPTIONS] [URL|ID]")
