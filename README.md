@@ -67,14 +67,15 @@ dylive -exec "bash cmd.sh" list-of-ids...
 
 ```
 # cmd.sh
-info=($(jq -r ".Index, .LiveStreamUrl, .User.Name"))
-index=${info[0]}
-url=${info[1]}
-name=${info[2]}
-mpv --really-quiet --title="$name" \
-  --geometry=50%+$((index % 4 % 2 * 100))%+$((index / 2 % 2 * 100))% \
-  $url &
+info=($(jq -r ".Index%4%2*100, .Index/2%2*100, .LiveStreamUrl, .User.Name"))
+x=${info[0]}
+y=${info[1]}
+url=${info[2]}
+name=${info[3]}
+mpv --really-quiet --title="$name" --no-border --geometry="50%+$x%+$y%" $url &
 ```
+
+https://user-images.githubusercontent.com/1284703/122740688-cc653e00-d2b6-11eb-86a8-0bffb9e33a7a.mp4
 
 ## Device ID
 
