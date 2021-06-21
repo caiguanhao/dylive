@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -176,7 +177,10 @@ outer:
 	}
 }
 
+var cmdIdx int = -1
+
 func output(room *douyinapi.Room, usesJson bool, commandTemplate *template.Template) {
+	cmdIdx += 1
 	var liveStreamUrl string
 	if url := room.StreamHlsUrlMap["FULL_HD1"]; url != "" {
 		liveStreamUrl = url
@@ -194,28 +198,48 @@ func output(room *douyinapi.Room, usesJson bool, commandTemplate *template.Templ
 	obj := struct {
 		*douyinapi.Room
 		LiveStreamUrl string
-	}{room, liveStreamUrl}
+		Index         int
+	}{room, liveStreamUrl, cmdIdx}
 	if usesJson {
 		json.NewEncoder(os.Stdout).Encode(obj)
 	} else {
 		fmt.Println(liveStreamUrl)
 	}
-	if commandTemplate != nil {
-		var buf bytes.Buffer
-		err := commandTemplate.Execute(&buf, obj)
-		if err == nil {
-			parts := strings.Fields(buf.String())
-			if len(parts) > 0 {
-				cmd := exec.Command(parts[0], parts[1:]...)
-				cmd.Stdout = os.Stderr
-				cmd.Stderr = os.Stderr
-				log.Println("starting", cmd)
-				cmd.Start()
-			}
-		} else {
-			log.Println(err)
-		}
+	if commandTemplate == nil {
+		return
 	}
+	var buf bytes.Buffer
+	err := commandTemplate.Execute(&buf, obj)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	parts, err := strToArgv(buf.String())
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	if len(parts) == 0 {
+		return
+	}
+	cmd := exec.Command(parts[0], parts[1:]...)
+	b, _ := json.Marshal(obj)
+	cmd.Stdin = bytes.NewReader(append(b, '\n'))
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	log.Printf("cmd#%02d starting: %s", cmdIdx, cmd)
+	err = cmd.Start()
+	if err != nil {
+		log.Printf("cmd#%02d error: %s", cmdIdx, err)
+		return
+	}
+	go func() {
+		if err := cmd.Wait(); err != nil {
+			log.Printf("cmd#%02d error: %s", cmdIdx, err)
+		} else {
+			log.Printf("cmd#%02d ran successfully", cmdIdx)
+		}
+	}()
 }
 
 func enumerateDeviceId(from uint64, count int, printId bool) (out []uint64) {
@@ -234,6 +258,64 @@ func enumerateDeviceId(from uint64, count int, printId bool) (out []uint64) {
 			found += 1
 		}
 		i += 1
+	}
+	return
+}
+
+// copied from https://github.com/cloverstd/parse-string-argv
+func strToArgv(cmd string) (argv []string, err error) {
+	const (
+		singleQuote = '\''
+		doubleQuote = '"'
+		split       = ' '
+	)
+	var (
+		temp      []byte
+		prevQuote byte
+	)
+	for i := 0; i < len(cmd); i++ {
+		switch cmd[i] {
+		case split:
+			if prevQuote == 0 {
+				if len(temp) != 0 {
+					argv = append(argv, string(temp))
+					temp = temp[:0]
+				}
+				continue // skip space
+			}
+		case singleQuote, doubleQuote:
+			if prevQuote == 0 {
+				if i == 0 || cmd[i-1] == split {
+					prevQuote = cmd[i]
+					continue
+				}
+			} else if cmd[i] == prevQuote {
+				if i == len(cmd)-1 {
+					if len(temp) != 0 {
+						argv = append(argv, string(temp))
+						temp = temp[:0]
+					}
+				} else if cmd[i+1] != split {
+					argv = argv[:0]
+					return nil, fmt.Errorf("invalid cmd string: %s", cmd)
+				}
+				prevQuote = 0
+				if len(temp) != 0 {
+					argv = append(argv, string(temp))
+					temp = temp[:0]
+				}
+				continue
+			}
+		}
+		temp = append(temp, cmd[i])
+		if len(cmd)-1 == i {
+			argv = append(argv, string(temp))
+			temp = temp[:0]
+		}
+	}
+	if prevQuote != 0 {
+		err = errors.New("invalid cmd string: unclosed quote")
+		argv = argv[:0]
 	}
 	return
 }

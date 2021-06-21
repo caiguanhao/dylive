@@ -32,9 +32,6 @@ You can use [streamlink](https://streamlink.github.io/) to download the live str
 
 ```
 dylive https://v.douyin.com/exdfyjt/ | xargs -I X streamlink --player /Applications/mpv.app/Contents/MacOS/mpv -r video.ts X best
-
-# or use the -exec option (especially useful for Windows)
-dylive -exec "streamlink --player mpv -r video.ts {{.LiveStreamUrl}} best" exdgtjK
 ```
 
 ### Wait User's Live Stream
@@ -46,6 +43,37 @@ Monitor list of users. Once one of them starts new live stream, opens new mpv wi
 ```
 # it's OK to just use ID in the URLs
 dylive exJ1CqY exJk92q | xargs -n 1 -I X open -na mpv X --args --autofit="50%" 
+```
+
+## Execute Command
+
+You can use the `-exec` option to run a command, especially useful for Windows.
+
+```
+# play and record the live stream
+dylive -exec "streamlink --player mpv -r video.ts {{.LiveStreamUrl}} best" exdgtjK
+
+# ... with a custom file name
+dylive -exec "streamlink -r {{printf \"%s - %s.ts\" .User.Name \
+  (.CreatedAt.Format \"2006-01-02\") | printf \"%q\"}} {{.LiveStreamUrl}} best" exdgtjK
+```
+
+The command can read the live stream info in JSON from standard input.
+For example, open multiple live streams and tile the windows:
+
+```
+dylive -exec "bash cmd.sh" list-of-ids...
+```
+
+```
+# cmd.sh
+info=($(jq -r ".Index, .LiveStreamUrl, .User.Name"))
+index=${info[0]}
+url=${info[1]}
+name=${info[2]}
+mpv --really-quiet --title="$name" \
+  --geometry=50%+$((index % 4 % 2 * 100))%+$((index / 2 % 2 * 100))% \
+  $url &
 ```
 
 ## Device ID
