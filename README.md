@@ -12,9 +12,21 @@ You can:
 
 ```
 go get -v -u github.com/caiguanhao/dylive
+
+# if you want to search for Douyin users, also install dysearch
+go get -v -u github.com/caiguanhao/dylive/dysearch
 ```
 
 ## Usage
+
+### Search And Watch
+
+Search top 2 Douyin live streamers whose name contains 红警 (Red Alert) and
+open mpv to watch their live streams.
+
+```
+dysearch -L -F -n 2 红警 | xargs dylive | xargs -n1 open -na mpv
+```
 
 ### Watch Live Stream
 
