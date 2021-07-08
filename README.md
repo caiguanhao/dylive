@@ -28,6 +28,22 @@ open mpv to watch their live streams.
 dysearch -L -F -n 2 红警 | xargs dylive | xargs -n1 open -na mpv
 ```
 
+`dysearch` supports printing results in a table.
+
+```
+dysearch -L -F -table 红警
+ID                NAME              FOLLOWERS  FAVORITED  ROOM CREATED  VIEWERS  NICK NAME
+4094182951237853  dbg666666666666   464790     4001151    1h57m45s      3851     红警直播大彬
+64607696525       268509981         366973     193566     1h8m4s        1656     红警飞哥
+86712476626       LaoSiJi666666888  179176     754590     1h12m54s      318      红警老撕鸡🐔
+452608268184679   wkf2319           147923     1179171    2h48m48s      926      红警王尤里
+93603545482       chaorenhongjing   120428     13476      1h46m0s       270      红警阳光超人
+94792729333       hongjingzhibo     116173     230472     1m3s          4        红警直播舞虾
+4221738880606076  hongjingniusan    79228      26814      9m58s         7597     红警直播牛三
+97894106911       890835888         24556      26941      56m19s        78       红警程弟
+59773964913       chashu666         7197       692        6h50m16s      30       红警直播老茶666
+```
+
 ### Watch Live Stream
 
 In any user profile page, copy user ID (user name) listed below user's nick name.
