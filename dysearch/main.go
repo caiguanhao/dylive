@@ -118,7 +118,7 @@ func main() {
 func newContext() (context.Context, context.CancelFunc) {
 	ctx := context.Background()
 	if wsDebugUrl != "" {
-		return chromedp.NewRemoteAllocator(ctx, wsDebugUrl)
+		ctx, _ = chromedp.NewRemoteAllocator(ctx, wsDebugUrl)
 	}
 	return chromedp.NewContext(ctx)
 }
@@ -169,7 +169,7 @@ func getResponse(query string) ([]byte, error) {
 			network.Enable(),
 			chromedp.Emulate(device.IPhoneX),
 			chromedp.Navigate(pageUrl),
-			chromedp.Sleep(10*time.Second),
+			chromedp.Sleep(20*time.Second),
 		)
 		if err != nil {
 			chanError <- err
@@ -182,7 +182,7 @@ func getResponse(query string) ([]byte, error) {
 		return response, nil
 	case err := <-chanError:
 		return nil, err
-	case <-time.After(10 * time.Second):
+	case <-time.After(20 * time.Second):
 		return nil, errors.New("timed out")
 	}
 }
