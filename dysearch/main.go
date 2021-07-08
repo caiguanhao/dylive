@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
@@ -75,6 +76,7 @@ func main() {
 	minFollowers := flag.Int("f", 1000, "only list users having at least number of followers")
 	maxUsers := flag.Int("n", 0, "get at most number of users for every query, 0 to disable")
 	useJson := flag.Bool("json", false, "output json")
+	useTable := flag.Bool("table", false, "output table")
 	sortByFollowers := flag.Bool("F", false, "sort by followers count")
 	flag.Parse()
 
@@ -108,6 +110,8 @@ func main() {
 
 	if *useJson {
 		json.NewEncoder(os.Stdout).Encode(allUsers)
+	} else if *useTable {
+		printTable(allUsers)
 	} else {
 		for _, user := range allUsers {
 			fmt.Println(user.Name)
@@ -217,4 +221,43 @@ func getUsers(data []byte) (users []User, err error) {
 func strToId(in string) Id {
 	out, _ := strconv.ParseUint(in, 10, 64)
 	return Id(out)
+}
+
+func printTable(users []User) {
+	lines := [][]string{
+		{"ID", "NAME", "FOLLOWERS", "FAVORITED", "NICK NAME"},
+	}
+	max := []int{}
+	for _, c := range lines[0] {
+		l := utf8.RuneCountInString(c)
+		max = append(max, l)
+	}
+	for _, user := range users {
+		line := []string{
+			fmt.Sprint(user.UniqueId),
+			fmt.Sprint(user.Name),
+			fmt.Sprint(user.FollowersCount),
+			fmt.Sprint(user.FavoritedCount),
+			fmt.Sprint(user.NickName),
+		}
+		for i, f := range line {
+			l := utf8.RuneCountInString(f)
+			if l > max[i] {
+				max[i] = l
+			}
+		}
+		lines = append(lines, line)
+	}
+	formats := []string{}
+	for _, n := range max {
+		formats = append(formats, fmt.Sprintf("%%-%ds", n))
+	}
+	format := strings.Join(formats, "  ") + "\n"
+	for _, line := range lines {
+		l := []interface{}{}
+		for _, c := range line {
+			l = append(l, c)
+		}
+		fmt.Printf(format, l...)
+	}
 }
