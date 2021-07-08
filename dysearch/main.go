@@ -12,9 +12,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
+	"github.com/caiguanhao/dylive/douyinapi"
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
@@ -39,6 +41,7 @@ type (
 		Picture        string
 		FollowersCount int
 		FavoritedCount int
+		Room           *douyinapi.Room
 	}
 
 	byUserFollowersCount []User
@@ -78,6 +81,8 @@ func main() {
 	useJson := flag.Bool("json", false, "output json")
 	useTable := flag.Bool("table", false, "output table")
 	sortByFollowers := flag.Bool("F", false, "sort by followers count")
+	getLiveInfo := flag.Bool("l", false, "also get user live room info")
+	showOnlyLive := flag.Bool("L", false, "only list users started live broadcast")
 	flag.Parse()
 
 	allUsers := []User{}
@@ -108,10 +113,18 @@ func main() {
 		allUsers = append(allUsers, filtered...)
 	}
 
+	if *getLiveInfo {
+		getRoomInfo(allUsers)
+	}
+
+	if *showOnlyLive {
+		allUsers = filterLiveUsers(allUsers)
+	}
+
 	if *useJson {
 		json.NewEncoder(os.Stdout).Encode(allUsers)
 	} else if *useTable {
-		printTable(allUsers)
+		printTable(allUsers, *getLiveInfo)
 	} else {
 		for _, user := range allUsers {
 			fmt.Println(user.Name)
@@ -223,12 +236,15 @@ func strToId(in string) Id {
 	return Id(out)
 }
 
-func printTable(users []User) {
-	lines := [][]string{
-		{"ID", "NAME", "FOLLOWERS", "FAVORITED", "NICK NAME"},
+func printTable(users []User, showRoom bool) {
+	firstLine := []string{"ID", "NAME", "FOLLOWERS", "FAVORITED"}
+	if showRoom {
+		firstLine = append(firstLine, "ROOM CREATED")
 	}
+	firstLine = append(firstLine, "NICK NAME")
+	lines := [][]string{firstLine}
 	max := []int{}
-	for _, c := range lines[0] {
+	for _, c := range firstLine {
 		l := utf8.RuneCountInString(c)
 		max = append(max, l)
 	}
@@ -238,8 +254,16 @@ func printTable(users []User) {
 			fmt.Sprint(user.Name),
 			fmt.Sprint(user.FollowersCount),
 			fmt.Sprint(user.FavoritedCount),
-			fmt.Sprint(user.NickName),
 		}
+		if showRoom {
+			if user.Room == nil {
+				line = append(line, "-")
+			} else {
+				duration := time.Since(user.Room.CreatedAt).Round(time.Second)
+				line = append(line, duration.String())
+			}
+		}
+		line = append(line, fmt.Sprint(user.NickName))
 		for i, f := range line {
 			l := utf8.RuneCountInString(f)
 			if l > max[i] {
@@ -260,4 +284,43 @@ func printTable(users []User) {
 		}
 		fmt.Printf(format, l...)
 	}
+}
+
+func filterLiveUsers(users []User) (filtered []User) {
+	for _, user := range users {
+		if user.Room != nil {
+			filtered = append(filtered, user)
+		}
+	}
+	return
+}
+
+func getRoomInfo(users []User) {
+	names := make(chan int)
+	go func() {
+		defer close(names)
+		for i := range users {
+			names <- i
+		}
+	}()
+	concurrency := 4
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			defer wg.Done()
+			for i := range names {
+				if verbosive {
+					log.Println(users[i].Name+":", "getting live info")
+				}
+				user, err := douyinapi.GetUserByName(users[i].Name)
+				if err != nil {
+					log.Println(users[i].Name+":", err)
+					continue
+				}
+				users[i].Room = user.Room
+			}
+		}()
+	}
+	wg.Wait()
 }
