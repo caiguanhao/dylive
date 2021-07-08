@@ -107,18 +107,16 @@ func main() {
 		if *sortByFollowers {
 			sort.Sort(byUserFollowersCount(filtered))
 		}
+		if *getLiveInfo {
+			getRoomInfo(filtered)
+		}
+		if *showOnlyLive {
+			filtered = filterLiveUsers(filtered)
+		}
 		if *maxUsers > 0 && *maxUsers < len(filtered) {
 			filtered = filtered[:*maxUsers]
 		}
 		allUsers = append(allUsers, filtered...)
-	}
-
-	if *getLiveInfo {
-		getRoomInfo(allUsers)
-	}
-
-	if *showOnlyLive {
-		allUsers = filterLiveUsers(allUsers)
 	}
 
 	if *useJson {
