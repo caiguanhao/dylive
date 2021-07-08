@@ -107,7 +107,7 @@ func main() {
 		if *sortByFollowers {
 			sort.Sort(byUserFollowersCount(filtered))
 		}
-		if *getLiveInfo {
+		if *getLiveInfo || *showOnlyLive {
 			getRoomInfo(filtered)
 		}
 		if *showOnlyLive {
@@ -122,7 +122,7 @@ func main() {
 	if *useJson {
 		json.NewEncoder(os.Stdout).Encode(allUsers)
 	} else if *useTable {
-		printTable(allUsers, *getLiveInfo)
+		printTable(allUsers, *getLiveInfo || *showOnlyLive)
 	} else {
 		for _, user := range allUsers {
 			fmt.Println(user.Name)
