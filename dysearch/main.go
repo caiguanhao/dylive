@@ -237,7 +237,7 @@ func strToId(in string) Id {
 func printTable(users []User, showRoom bool) {
 	firstLine := []string{"ID", "NAME", "FOLLOWERS", "FAVORITED"}
 	if showRoom {
-		firstLine = append(firstLine, "ROOM CREATED")
+		firstLine = append(firstLine, "ROOM CREATED", "VIEWERS")
 	}
 	firstLine = append(firstLine, "NICK NAME")
 	lines := [][]string{firstLine}
@@ -255,10 +255,10 @@ func printTable(users []User, showRoom bool) {
 		}
 		if showRoom {
 			if user.Room == nil {
-				line = append(line, "-")
+				line = append(line, "-", "-")
 			} else {
 				duration := time.Since(user.Room.CreatedAt).Round(time.Second)
-				line = append(line, duration.String())
+				line = append(line, duration.String(), fmt.Sprint(user.Room.CurrentUsersCount))
 			}
 		}
 		line = append(line, fmt.Sprint(user.NickName))
