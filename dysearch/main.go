@@ -361,7 +361,10 @@ func getRoomInfo(users []User) {
 					log.Println(users[i].Name+":", err)
 					continue
 				}
-				users[i].Room = user.Room
+				if user.Room != nil {
+					room, _ := douyinapi.GetRoom(user.Room.PageUrl)
+					users[i].Room = room
+				}
 			}
 		}()
 	}
