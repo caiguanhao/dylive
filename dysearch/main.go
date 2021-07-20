@@ -24,8 +24,14 @@ import (
 )
 
 var (
-	verbosive  bool
-	wsDebugUrl string
+	verbosive    bool
+	wsDebugUrl   string
+	verifyCookie string
+	noHeadless   bool
+)
+
+const (
+	defaultVerifyCookie = "verify_5a4d7ab43af9c789a2486c3de4b2d15c"
 )
 
 type (
@@ -83,6 +89,8 @@ func main() {
 	sortByFollowers := flag.Bool("F", false, "sort by followers count")
 	getLiveInfo := flag.Bool("l", false, "also get user live room info")
 	showOnlyLive := flag.Bool("L", false, "only list users started live broadcast")
+	flag.StringVar(&verifyCookie, "verify", defaultVerifyCookie, "verify cookie value")
+	flag.BoolVar(&noHeadless, "no-headless", false, "no headless")
 	flag.Parse()
 
 	allUsers := []User{}
@@ -135,6 +143,13 @@ func newContext() (context.Context, context.CancelFunc) {
 	if wsDebugUrl != "" {
 		ctx, _ = chromedp.NewRemoteAllocator(ctx, wsDebugUrl)
 	}
+	if noHeadless {
+		options := append(
+			chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.Flag("headless", false),
+		)
+		ctx, _ = chromedp.NewExecAllocator(ctx, options...)
+	}
 	return chromedp.NewContext(ctx)
 }
 
@@ -169,13 +184,30 @@ func getResponse(query string) ([]byte, error) {
 		}
 		go func() {
 			c := chromedp.FromContext(ctx)
+			cc := cdp.WithExecutor(ctx, c.Target)
+			if noHeadless {
+				cookies, _ := network.GetCookies().WithUrls([]string{ev.Response.URL}).Do(cc)
+				for _, cookie := range cookies {
+					if cookie.Name == "s_v_web_id" {
+						log.Println("received headers:", cookie.Name, "=", cookie.Value)
+					}
+				}
+			}
 			rbp := network.GetResponseBody(ev.RequestID)
-			body, err := rbp.Do(cdp.WithExecutor(ctx, c.Target))
+			body, err := rbp.Do(cc)
 			if err != nil {
 				chanError <- err
 				return
 			}
-			chanResponse <- body
+			if noHeadless {
+				b := string(body)
+				if len(b) > 200 {
+					b = b[:200]
+				}
+				log.Println("received", b)
+			} else {
+				chanResponse <- body
+			}
 		}()
 	})
 	go func() {
@@ -183,13 +215,26 @@ func getResponse(query string) ([]byte, error) {
 			ctx,
 			network.Enable(),
 			chromedp.Emulate(device.IPhoneX),
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				return network.SetCookie("s_v_web_id", verifyCookie).
+					WithExpires(nil).
+					WithDomain("www.douyin.com").
+					WithPath("/").
+					WithHTTPOnly(false).
+					WithSecure(false).
+					Do(ctx)
+			}),
 			chromedp.Navigate(pageUrl),
-			chromedp.Sleep(20*time.Second),
 		)
 		if err != nil {
 			chanError <- err
 		}
 	}()
+
+	timeout := time.After(20 * time.Second)
+	if noHeadless {
+		timeout = make(chan time.Time)
+	}
 
 	select {
 	case response := <-chanResponse:
@@ -197,7 +242,7 @@ func getResponse(query string) ([]byte, error) {
 		return response, nil
 	case err := <-chanError:
 		return nil, err
-	case <-time.After(20 * time.Second):
+	case <-timeout:
 		return nil, errors.New("timed out")
 	}
 }
