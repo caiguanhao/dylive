@@ -20,6 +20,8 @@ var (
 
 	ErrInvalidData = errors.New("invalid page data")
 	ErrNoSuchUser  = errors.New("no such user")
+	ErrorNoUrl     = errors.New("No URL found")
+	ErrorNoRoom    = errors.New("No room found")
 )
 
 type (
@@ -216,4 +218,62 @@ func roomUrl(id string) string {
 func strToId(in string) Id {
 	out, _ := strconv.ParseUint(in, 10, 64)
 	return Id(out)
+}
+
+const (
+	scriptOpen  = "<script>window.__INIT_PROPS__ = "
+	scriptClose = "</script>"
+)
+
+func GetRoom(url string) (room *Room, err error) {
+	if url == "" {
+		err = ErrorNoUrl
+		return
+	}
+	var req *http.Request
+	req, err = http.NewRequest("GET", url, nil)
+	req.Header.Set("User-Agent", UserAgent)
+	if err != nil {
+		return
+	}
+	var resp *http.Response
+	client := &http.Client{
+		Timeout: HttpTimeout,
+	}
+	resp, err = client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	var b []byte
+	b, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	room = getRoomFromHtml(string(b))
+	if room == nil {
+		err = ErrorNoRoom
+	}
+	return
+}
+
+func getRoomFromHtml(html string) *Room {
+	i := strings.Index(html, scriptOpen)
+	if i < 0 {
+		return nil
+	}
+	html = html[i+len(scriptOpen):]
+	i = strings.Index(html, scriptClose)
+	if i < 0 {
+		return nil
+	}
+	html = html[:i]
+	bytes := []byte(html)
+	var obj map[string]map[string]dyRoom
+	json.Unmarshal(bytes, &obj)
+	room := obj["/webcast/reflow/:id"]["room"]
+	if room.IdString != "" {
+		return room.toRoom()
+	}
+	return nil
 }
