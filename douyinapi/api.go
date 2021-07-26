@@ -28,15 +28,13 @@ type (
 	Id uint64
 
 	User struct {
-		Id              Id     // will change over time
-		UniqueId        Id     // will change over time
-		SecUid          string // constant
-		Name            string // user id in user profile page
-		NickName        string // aka "display name"
-		Picture         string // url of thumbnail picture
-		FollowersCount  int    // followers count
-		FollowingsCount int    // followings count
-		Room            *Room  // live stream room (if any)
+		Id       Id     // will change over time
+		UniqueId Id     // will change over time
+		SecUid   string // constant
+		Name     string // user id in user profile page
+		NickName string // aka "display name"
+		Picture  string // url of thumbnail picture
+		Room     *Room  // live stream room (if any)
 	}
 
 	Room struct {
@@ -97,23 +95,23 @@ type (
 			UserID       string `json:"user_id"`
 			UserUniqueID string `json:"user_unique_id"`
 		} `json:"odin"`
+		InitialState struct {
+			RoomStore struct {
+				RoomInfo struct {
+					Room   *dyRoom `json:"room"`
+					RoomID string  `json:"roomId"`
+					Anchor struct {
+						Nickname    string `json:"nickname"`
+						AvatarThumb struct {
+							URLList []string `json:"url_list"`
+						} `json:"avatar_thumb"`
+						SecUID string `json:"sec_uid"`
+					} `json:"anchor"`
+				} `json:"roomInfo"`
+			} `json:"roomStore"`
+		} `json:"initialState"`
 		RouteInitialProps struct {
 			ErrorType string `json:"errorType"`
-			RoomInfo  struct {
-				Room   *dyRoom `json:"room"`
-				RoomID string  `json:"roomId"`
-				Anchor struct {
-					Nickname    string `json:"nickname"`
-					AvatarThumb struct {
-						URLList []string `json:"url_list"`
-					} `json:"avatar_thumb"`
-					FollowInfo struct {
-						FollowingCount int `json:"following_count"`
-						FollowerCount  int `json:"follower_count"`
-					} `json:"follow_info"`
-					SecUID string `json:"sec_uid"`
-				} `json:"anchor"`
-			} `json:"roomInfo"`
 		} `json:"routeInitialProps"`
 	}
 
@@ -193,21 +191,20 @@ func parseLivePageHtml(html string) (*User, error) {
 	if data.RouteInitialProps.ErrorType == "server-error" {
 		return nil, ErrNoSuchUser
 	}
+	roomInfo := data.InitialState.RoomStore.RoomInfo
 	var picture string
-	pictures := data.RouteInitialProps.RoomInfo.Anchor.AvatarThumb.URLList
+	pictures := roomInfo.Anchor.AvatarThumb.URLList
 	if len(pictures) > 0 {
 		picture = pictures[0]
 	}
 	return &User{
-		Id:              strToId(data.Odin.UserID),
-		UniqueId:        strToId(data.Odin.UserUniqueID),
-		SecUid:          data.RouteInitialProps.RoomInfo.Anchor.SecUID,
-		Room:            data.RouteInitialProps.RoomInfo.Room.toRoom(),
-		Name:            strings.Trim(data.Location, "/"),
-		NickName:        data.RouteInitialProps.RoomInfo.Anchor.Nickname,
-		Picture:         picture,
-		FollowersCount:  data.RouteInitialProps.RoomInfo.Anchor.FollowInfo.FollowerCount,
-		FollowingsCount: data.RouteInitialProps.RoomInfo.Anchor.FollowInfo.FollowingCount,
+		Id:       strToId(data.Odin.UserID),
+		UniqueId: strToId(data.Odin.UserUniqueID),
+		SecUid:   roomInfo.Anchor.SecUID,
+		Room:     roomInfo.Room.toRoom(),
+		Name:     strings.Trim(data.Location, "/"),
+		NickName: roomInfo.Anchor.Nickname,
+		Picture:  picture,
 	}, nil
 }
 
