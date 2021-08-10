@@ -96,6 +96,10 @@ var cmdIdx int = -1
 func output(user *douyinapi.User, usesJson bool, commandTemplate *template.Template) {
 	cmdIdx += 1
 	var liveStreamUrl string
+	if user.Room.StreamHlsUrlMap == nil {
+		room, _ := douyinapi.GetRoom(user.Room.PageUrl)
+		user.Room = room
+	}
 	if url := user.Room.StreamHlsUrlMap["FULL_HD1"]; url != "" {
 		liveStreamUrl = url
 	} else if url := user.Room.StreamHlsUrlMap["HD1"]; url != "" {
