@@ -8,6 +8,8 @@ You can:
 - Write your own script and get notified (or start recording, etc.) once new
   live stream is started
 
+NOTE: dysearch is not working any more currently.
+
 ## Install
 
 ```
