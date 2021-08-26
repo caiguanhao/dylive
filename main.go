@@ -77,7 +77,7 @@ OPTIONS:`)
 					user.NickName, user.Name, duration)
 				started[userId] = true
 			}
-			if user.Room == nil {
+			if user.Room == nil || user.Room.Operating == false {
 				continue
 			}
 			roomId := uint64(user.Room.Id)
