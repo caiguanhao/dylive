@@ -169,7 +169,7 @@ func getCategories() {
 		if i > 0 {
 			fmt.Fprintf(paneCats, "  ")
 		}
-		fmt.Fprintf(paneCats, `%d ["%d"][darkcyan]%s[white][""]`, i+1, i+1, cat.Name)
+		fmt.Fprintf(paneCats, `F%d ["%d"][darkcyan]%s[white][""]`, i+1, i+1, cat.Name)
 	}
 	paneCats.Highlight("1")
 	app.Draw()
@@ -196,15 +196,15 @@ func renderRooms() {
 	for i, room := range rooms {
 		var key string
 		if i < 9 {
-			key = "alt-" + string('1'+i)
-		} else if i < 35 {
-			key = "alt-" + string('a'+i-9)
+			key = "[darkcyan](" + string('1'+i) + ")[white] "
+		} else {
+			key = "    "
 		}
-		paneRooms.SetCell(i, 0, tview.NewTableCell("[darkcyan]"+key+"[white]").SetExpansion(1))
-		paneRooms.SetCell(i, 1, tview.NewTableCell(room.User.Name).SetExpansion(2))
-		paneRooms.SetCell(i, 2, tview.NewTableCell(room.CurrentUsersCount).SetExpansion(2))
+		name := key + room.User.Name
+		paneRooms.SetCell(i, 0, tview.NewTableCell(name).SetExpansion(2))
+		paneRooms.SetCell(i, 1, tview.NewTableCell(room.CurrentUsersCount).SetExpansion(2))
 		if paneRoomsShowRoomName {
-			paneRooms.SetCell(i, 3, tview.NewTableCell(room.Name))
+			paneRooms.SetCell(i, 2, tview.NewTableCell(room.Name))
 		}
 	}
 	if paneRoomsLoading != nil {
@@ -290,32 +290,26 @@ func selectCategory(cat *dylive.Category) {
 
 func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 	r := event.Rune()
+	key := event.Key()
 	if r == '?' {
 		nextHelpMessage()
 		return event
 	}
-	if event.Modifiers() == tcell.ModAlt {
-		if r >= '1' && r <= '9' {
-			idx := int(r - '1')
-			paneRooms.Select(idx, 0)
-			selectRoom(idx)
-		} else if r >= 'a' && r <= 'z' {
-			idx := int(r-'a') + 9
-			paneRooms.Select(idx, 0)
-			selectRoom(idx)
-		}
-	} else {
-		if r >= '1' && r <= '9' {
-			n := int(r - '0')
-			if n >= 1 && n <= len(categories) {
-				paneCats.Highlight(strconv.Itoa(n))
-			}
-		}
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || strings.ContainsRune(extraKeys, r) {
-			app.SetFocus(paneSubCats)
+	if key >= tcell.KeyF1 && key <= tcell.KeyF12 {
+		n := int(key-tcell.KeyF1) + 1
+		if n >= 1 && n <= len(categories) {
+			paneCats.Highlight(strconv.Itoa(n))
 		}
 	}
-	switch event.Key() {
+	if r >= '1' && r <= '9' {
+		idx := int(r - '1')
+		paneRooms.Select(idx, 0)
+		selectRoom(idx)
+	}
+	if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || strings.ContainsRune(extraKeys, r) {
+		app.SetFocus(paneSubCats)
+	}
+	switch key {
 	case tcell.KeyEnter:
 		lastEnterWithAlt = event.Modifiers() == tcell.ModAlt
 	case tcell.KeyLeft, tcell.KeyBacktab:
