@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"os/exec"
 	"path"
@@ -37,6 +38,8 @@ var (
 
 	categories []dylive.Category
 	rooms      []dylive.Room
+
+	selectedRooms selections
 
 	lastEnterWithAlt bool
 
@@ -123,7 +126,11 @@ func main() {
 			go updateStatus(rooms[row].WebUrl, 0)
 		}).
 		SetSelectedFunc(func(row, column int) {
-			selectRoom(row)
+			if len(selectedRooms) > 0 {
+				selectRooms()
+			} else {
+				selectRoom(row, 0, 0)
+			}
 		})
 	paneRooms.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
 		if showRoomName := w > 60; paneRoomsShowRoomName != showRoomName {
@@ -247,21 +254,23 @@ func getRooms(id, name string) {
 	}
 	currentConfig.DefaultSubCategory = name
 	go updateStatus(fmt.Sprintf("成功获取「%s」的直播列表", name), 1*time.Second)
+	paneRooms.Select(0, 0)
 	renderRooms()
 	app.Draw()
 	app.SetFocus(paneRooms)
 }
 func renderRooms() {
 	paneRooms.Clear()
-	paneRooms.Select(0, 0)
 	for i, room := range rooms {
 		var key string
-		if i < 9 {
-			key = "[darkcyan](" + string('1'+i) + ")[white] "
+		if selectedRooms.has(i) {
+			key = "[cyan]" + tview.Escape("[X]") + "[white]"
+		} else if i < 9 {
+			key = "[darkcyan](" + string('1'+byte(i)) + ")[white]"
 		} else {
-			key = "    "
+			key = "   "
 		}
-		name := key + room.User.Name
+		name := key + " " + room.User.Name
 		paneRooms.SetCell(i, 0, tview.NewTableCell(name).SetExpansion(2))
 		paneRooms.SetCell(i, 1, tview.NewTableCell(room.CurrentUsersCount).SetExpansion(2))
 		if paneRoomsShowRoomName {
@@ -279,7 +288,14 @@ func renderRooms() {
 		false) // focus
 }
 
-func selectRoom(index int) {
+func selectRooms() {
+	size := len(selectedRooms)
+	for i, index := range selectedRooms {
+		selectRoom(index, i, size)
+	}
+}
+
+func selectRoom(index, nth, total int) {
 	if index < 0 || index >= len(rooms) {
 		return
 	}
@@ -323,9 +339,18 @@ func selectRoom(index int) {
 
 	switch cmdType {
 	case "mpv":
-		cmd = exec.Command(cmdName, "--title="+room.User.Name, "--force-window=immediate", room.StreamUrl)
+		args := []string{"--title=" + room.User.Name, "--force-window=immediate", room.StreamUrl}
+		if geometry := mpvGeometry(nth, total); geometry != "" {
+			args = append(args, "--geometry="+geometry)
+		}
+		cmd = exec.Command(cmdName, args...)
 	case "iina":
-		cmd = exec.Command(cmdName, room.StreamUrl, "--", "--force-media-title="+room.User.Name)
+		args := []string{room.StreamUrl, "--", "--force-media-title=" + room.User.Name}
+		if geometry := mpvGeometry(nth, total); geometry != "" {
+			args = append(args, "--geometry="+geometry)
+			time.Sleep(500 * time.Millisecond) // iina bug? open too fast will break
+		}
+		cmd = exec.Command(cmdName, args...)
 		cmd.Stdin = os.Stdin
 	case "open":
 		cmd = exec.Command("open", "-na", cmdName, room.StreamUrl)
@@ -406,21 +431,33 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 	key := event.Key()
 	if r == '?' {
 		nextHelpMessage()
-		return event
+		return nil
+	}
+	if r == ' ' {
+		row, _ := paneRooms.GetSelection()
+		if row < 0 || row >= len(rooms) {
+			return nil
+		}
+		selectedRooms.toggle(row)
+		renderRooms()
+		return nil
 	}
 	if key >= tcell.KeyF1 && key <= tcell.KeyF12 {
 		n := int(key-tcell.KeyF1) + 1
 		if n >= 1 && n <= len(categories) {
 			paneCats.Highlight(strconv.Itoa(n))
 		}
+		return nil
 	}
 	if r >= '1' && r <= '9' {
 		idx := int(r - '1')
 		paneRooms.Select(idx, 0)
-		selectRoom(idx)
+		selectRoom(idx, 0, 0)
+		return nil
 	}
 	if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || strings.ContainsRune(extraKeys, r) {
 		app.SetFocus(paneSubCats)
+		return event
 	}
 	switch key {
 	case tcell.KeyCtrlE:
@@ -529,4 +566,49 @@ func isDir(path string) bool {
 func commandExists(cmd string) bool {
 	_, err := exec.LookPath(cmd)
 	return err == nil
+}
+
+type selections []int
+
+func (s *selections) toggle(i int) {
+	if s.has(i) {
+		n := selections{}
+		for _, a := range *s {
+			if a != i {
+				n = append(n, a)
+			}
+		}
+		*s = n
+	} else {
+		*s = append(*s, i)
+	}
+}
+
+func (s selections) has(i int) bool {
+	for _, a := range s {
+		if a == i {
+			return true
+		}
+	}
+	return false
+}
+
+func arrange(size int) (rows, cols int) {
+	x := math.Sqrt(float64(size))
+	rows = int(math.Round(x))
+	cols = int(math.Ceil(float64(size) / math.Round(x)))
+	return
+}
+
+func mpvGeometry(nth, size int) string {
+	if size == 0 {
+		return ""
+	}
+	rows, cols := arrange(size)
+	cp := int(math.Floor(100 / float64(cols-1)))
+	rp := int(math.Floor(100 / float64(rows-1)))
+	w := int(math.Floor(100 / float64(cols)))
+	x := nth % cols * cp
+	y := nth / cols * rp
+	return fmt.Sprintf("%d%%+%d%%+%d%%", w, x, y)
 }
