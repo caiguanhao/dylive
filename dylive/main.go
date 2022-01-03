@@ -22,11 +22,15 @@ var (
 	paneRooms   *tview.Table
 	paneStatus  *tview.TextView
 
+	paneSubCatsLoading *verticalText
+	paneRoomsLoading   *verticalText
+
 	categories []dylive.Category
 	rooms      []dylive.Room
 )
 
 const (
+	title     = "dylive"
 	extraKeys = `!@#$%^&*()-=[]\;',./_+{}|:"<>?`
 )
 
@@ -36,6 +40,7 @@ func main() {
 	app.SetInputCapture(onKeyPressed)
 
 	paneCats = tview.NewTextView().
+		SetText(title).
 		SetTextAlign(tview.AlignCenter).
 		SetDynamicColors(true).
 		SetRegions(true).
@@ -57,6 +62,13 @@ func main() {
 			selectRoom(row)
 		})
 
+	paneSubCatsLoading = &verticalText{
+		tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter),
+	}
+	paneRoomsLoading = &verticalText{
+		tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter),
+	}
+
 	grid = tview.NewGrid().
 		SetRows(1, 0, 1).
 		SetColumns(30, 0).
@@ -66,14 +78,14 @@ func main() {
 			1, 2, // rowSpan, colSpan
 			0, 0, // minGridHeight, minGridWidth
 			false). // focus
+		AddItem(paneRoomsLoading,
+			1, 1, // row, column
+			1, 1, // rowSpan, colSpan
+			0, 0, // minGridHeight, minGridWidth
+			false). // focus
 		AddItem(paneStatus,
 			2, 0, // row, column
 			1, 2, // rowSpan, colSpan
-			0, 0, // minGridHeight, minGridWidth
-			false). // focus
-		AddItem(paneRooms,
-			1, 1, // row, column
-			1, 1, // rowSpan, colSpan
 			0, 0, // minGridHeight, minGridWidth
 			false) // focus
 
@@ -145,8 +157,16 @@ func getRooms(id, name string) {
 		paneRooms.SetCell(i, 2, tview.NewTableCell(room.CurrentUsersCount).SetExpansion(2))
 		paneRooms.SetCell(i, 3, tview.NewTableCell(room.Name))
 	}
+	if paneRoomsLoading != nil {
+		grid.RemoveItem(paneRoomsLoading)
+		paneRoomsLoading = nil
+	}
+	grid.AddItem(paneRooms,
+		1, 1, // row, column
+		1, 1, // rowSpan, colSpan
+		0, 0, // minGridHeight, minGridWidth
+		true) // focus
 	app.Draw()
-	app.SetFocus(paneRooms)
 }
 
 func selectRoom(index int) {
@@ -156,16 +176,27 @@ func selectRoom(index int) {
 }
 
 func selectCategory(cat *dylive.Category) {
-	if paneSubCats != nil {
-		grid.RemoveItem(paneSubCats)
-	}
+	var pane tview.Primitive
 
-	paneSubCats = tview.NewList().
-		SetHighlightFullLine(true).
-		SetWrapAround(false).
-		ShowSecondaryText(false)
+	if cat == nil {
+		pane = paneSubCatsLoading
+	} else {
+		if paneSubCatsLoading != nil {
+			grid.RemoveItem(paneSubCatsLoading)
+			paneSubCatsLoading = nil
+		}
 
-	if cat != nil {
+		if paneSubCats != nil {
+			grid.RemoveItem(paneSubCats)
+		}
+
+		paneSubCats = tview.NewList().
+			SetHighlightFullLine(true).
+			SetWrapAround(false).
+			ShowSecondaryText(false)
+
+		pane = paneSubCats
+
 		var firstHandler func()
 		for i, subcat := range cat.Categories {
 			var key rune
@@ -191,7 +222,7 @@ func selectCategory(cat *dylive.Category) {
 		}
 	}
 
-	grid.AddItem(paneSubCats,
+	grid.AddItem(pane,
 		1, 0, // row, column
 		1, 1, // rowSpan, colSpan
 		0, 0, // minGridHeight, minGridWidth
@@ -238,4 +269,14 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 	return event
+}
+
+type verticalText struct {
+	*tview.TextView
+}
+
+func (t *verticalText) Draw(s tcell.Screen) {
+	_, _, _, height := t.TextView.GetRect()
+	t.TextView.SetBorderPadding(height/2, 0, 0, 0)
+	t.TextView.Draw(s)
 }
