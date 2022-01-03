@@ -129,7 +129,7 @@ func main() {
 			if len(selectedRooms) > 0 {
 				selectRooms()
 			} else {
-				selectRoom(row, 0, 0)
+				selectRoomByIndex(row)
 			}
 		})
 	paneRooms.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
@@ -263,7 +263,7 @@ func renderRooms() {
 	paneRooms.Clear()
 	for i, room := range rooms {
 		var key string
-		if selectedRooms.has(i) {
+		if selectedRooms.has(room) {
 			key = "[cyan]" + tview.Escape("[X]") + "[white]"
 		} else if i < 9 {
 			key = "[darkcyan](" + string('1'+byte(i)) + ")[white]"
@@ -290,17 +290,20 @@ func renderRooms() {
 
 func selectRooms() {
 	size := len(selectedRooms)
-	for i, index := range selectedRooms {
-		selectRoom(index, i, size)
+	for i, room := range selectedRooms {
+		selectRoom(room, i, size)
 	}
 }
 
-func selectRoom(index, nth, total int) {
+func selectRoomByIndex(index int) {
 	if index < 0 || index >= len(rooms) {
 		return
 	}
 	room := rooms[index]
+	selectRoom(room, 0, 0)
+}
 
+func selectRoom(room dylive.Room, nth, total int) {
 	if lastEnterWithAlt == true {
 		exec.Command("open", room.WebUrl).Start()
 		return
@@ -438,7 +441,7 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		if row < 0 || row >= len(rooms) {
 			return nil
 		}
-		selectedRooms.toggle(row)
+		selectedRooms.toggle(rooms[row])
 		renderRooms()
 		return nil
 	}
@@ -452,7 +455,7 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 	if r >= '1' && r <= '9' {
 		idx := int(r - '1')
 		paneRooms.Select(idx, 0)
-		selectRoom(idx, 0, 0)
+		selectRoomByIndex(idx)
 		return nil
 	}
 	if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || strings.ContainsRune(extraKeys, r) {
@@ -568,13 +571,13 @@ func commandExists(cmd string) bool {
 	return err == nil
 }
 
-type selections []int
+type selections []dylive.Room
 
-func (s *selections) toggle(i int) {
+func (s *selections) toggle(i dylive.Room) {
 	if s.has(i) {
 		n := selections{}
 		for _, a := range *s {
-			if a != i {
+			if a.User.Name != i.User.Name {
 				n = append(n, a)
 			}
 		}
@@ -584,9 +587,9 @@ func (s *selections) toggle(i int) {
 	}
 }
 
-func (s selections) has(i int) bool {
+func (s selections) has(i dylive.Room) bool {
 	for _, a := range s {
-		if a == i {
+		if a.User.Name == i.User.Name {
 			return true
 		}
 	}
