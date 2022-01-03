@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -39,12 +40,18 @@ var (
 
 	lastEnterWithAlt bool
 
-	videoPlayer   string
-	helps         []string
 	currentHelp   int = -1
 	currentConfig config
 
 	statusChan = make(chan status)
+
+	helps = []string{
+		"[darkcyan](Shift)+Tab[white] 切换主分类",
+		"[darkcyan]Alt+Up/Down[white] 切换子分类",
+		"[darkcyan]Enter[white] 播放器打开",
+		"[darkcyan]Alt-Enter[white] 浏览器打开",
+		"[darkcyan]Ctrl-(Alt)-E[white] 编辑器打开",
+	}
 )
 
 const (
@@ -67,9 +74,6 @@ func main() {
 
 	cfdata, _ := ioutil.ReadFile(*configFile)
 	json.Unmarshal(cfdata, &currentConfig)
-
-	videoPlayer = findVideoPlayer()
-	helps = getHelpMessages()
 
 	app = tview.NewApplication()
 
@@ -279,14 +283,60 @@ func selectRoom(index int) {
 	if index < 0 || index >= len(rooms) {
 		return
 	}
-	stream := rooms[index].StreamUrl
-	web := rooms[index].WebUrl
-	if _, err := exec.LookPath("open"); err == nil {
-		if lastEnterWithAlt == false && videoPlayer != "" {
-			exec.Command("open", "-na", videoPlayer, stream).Start()
-			return
+	room := rooms[index]
+
+	if lastEnterWithAlt == true {
+		exec.Command("open", room.WebUrl).Start()
+		return
+	}
+
+	var cmdType, cmdName string
+	var cmd *exec.Cmd
+
+	player := os.Getenv("PLAYER")
+	if player == "" {
+		if commandExists("mpv") {
+			cmdType = "mpv"
+			cmdName = "mpv"
+		} else if commandExists("iina-cli") {
+			cmdType = "iina"
+			cmdName = "iina-cli"
+		} else if exists("/Applications/IINA.app") {
+			cmdType = "open"
+			cmdName = "IINA"
+		} else if exists("/Applications/VLC.app") {
+			cmdType = "open"
+			cmdName = "VLC"
 		}
-		exec.Command("open", web).Start()
+	} else {
+		cmdName = player
+		base := path.Base(player)
+		if base == "mpv" {
+			cmdType = "mpv"
+		} else if base == "iina-cli" {
+			cmdType = "iina"
+		} else if strings.HasSuffix(base, ".app") && isDir(player) {
+			cmdType = "open"
+			cmdName = player
+		}
+	}
+
+	switch cmdType {
+	case "mpv":
+		cmd = exec.Command(cmdName, "--title="+room.User.Name, "--force-window=immediate", room.StreamUrl)
+	case "iina":
+		cmd = exec.Command(cmdName, room.StreamUrl, "--", "--force-media-title="+room.User.Name)
+		cmd.Stdin = os.Stdin
+	case "open":
+		cmd = exec.Command("open", "-na", cmdName, room.StreamUrl)
+	default:
+		if cmdName != "" {
+			cmd = exec.Command(cmdName, room.StreamUrl)
+		}
+	}
+
+	if cmd != nil {
+		cmd.Start()
 	}
 }
 
@@ -397,7 +447,7 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 			e.Encode(data)
 			editor := os.Getenv("EDITOR")
 			if editor == "" {
-				if _, err := exec.LookPath("vim"); err == nil {
+				if commandExists("vim") {
 					editor = "vim"
 				} else {
 					editor = "vi"
@@ -427,29 +477,6 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 	return event
-}
-
-func findVideoPlayer() string {
-	if _, err := os.Stat("/Applications/IINA.app"); !os.IsNotExist(err) {
-		return "IINA"
-	} else if _, err := os.Stat("/Applications/VLC.app"); !os.IsNotExist(err) {
-		return "VLC"
-	}
-	return ""
-}
-
-func getHelpMessages() []string {
-	vp := videoPlayer
-	if vp == "" {
-		vp = "默认程序"
-	}
-	return []string{
-		"[darkcyan](Shift)+Tab[white] 切换主分类",
-		"[darkcyan]Alt+Up/Down[white] 切换子分类",
-		fmt.Sprintf("[darkcyan]Enter[white] 在%s打开", vp),
-		"[darkcyan]Alt-Enter[white] 在浏览器打开",
-		"[darkcyan]Ctrl-(Alt)-E[white] 在编辑器打开",
-	}
 }
 
 func nextHelpMessage() {
@@ -484,4 +511,22 @@ func monitorStatus() {
 
 func updateStatus(text string, wait time.Duration) {
 	statusChan <- status{text: text, wait: wait}
+}
+
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
+}
+
+func isDir(path string) bool {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return fileInfo.IsDir()
+}
+
+func commandExists(cmd string) bool {
+	_, err := exec.LookPath(cmd)
+	return err == nil
 }
