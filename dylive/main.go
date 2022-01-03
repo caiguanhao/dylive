@@ -27,6 +27,7 @@ var (
 	paneSubCatsLoading *tview.TextView
 	paneRoomsLoading   *tview.TextView
 
+	paneCatsShowKeys      bool
 	paneRoomsShowRoomName bool
 
 	categories []dylive.Category
@@ -53,7 +54,6 @@ func main() {
 	app.SetInputCapture(onKeyPressed)
 
 	paneCats = tview.NewTextView().
-		SetText(title).
 		SetTextAlign(tview.AlignCenter).
 		SetDynamicColors(true).
 		SetRegions(true).
@@ -65,6 +65,13 @@ func main() {
 				selectCategory(&categories[idx])
 			}
 		})
+	paneCats.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		if showKeys := w > 75; paneCatsShowKeys != showKeys {
+			paneCatsShowKeys = showKeys
+			renderCategories()
+		}
+		return x, y, w, h
+	})
 
 	paneStatus = tview.NewTextView()
 	paneStatus.SetBorderPadding(0, 0, 1, 1)
@@ -164,15 +171,26 @@ func getCategories() {
 		return
 	}
 	paneStatus.SetText("成功获取分类")
+	renderCategories()
+	paneCats.Highlight("1")
+	app.Draw()
+}
+
+func renderCategories() {
+	if len(categories) == 0 {
+		paneCats.SetText(title)
+		return
+	}
 	paneCats.Clear()
 	for i, cat := range categories {
 		if i > 0 {
 			fmt.Fprintf(paneCats, "  ")
 		}
-		fmt.Fprintf(paneCats, `F%d ["%d"][darkcyan]%s[white][""]`, i+1, i+1, cat.Name)
+		if paneCatsShowKeys {
+			fmt.Fprintf(paneCats, `F%d `, i+1)
+		}
+		fmt.Fprintf(paneCats, `["%d"][darkcyan]%s[white][""]`, i+1, cat.Name)
 	}
-	paneCats.Highlight("1")
-	app.Draw()
 }
 
 func getRooms(id, name string) {
