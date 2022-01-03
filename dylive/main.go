@@ -120,6 +120,15 @@ func main() {
 			0, 0, // minGridHeight, minGridWidth
 			false) // focus
 
+	grid.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		w1 := w / 3
+		if w1 > 30 {
+			w1 = 30
+		}
+		grid.SetColumns(w1, 0)
+		return x, y, w, h
+	})
+
 	selectCategory(nil)
 
 	go getCategories()
