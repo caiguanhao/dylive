@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strconv"
@@ -337,6 +339,42 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		app.SetFocus(paneSubCats)
 	}
 	switch key {
+	case tcell.KeyCtrlE:
+		app.Suspend(func() {
+			var data interface{}
+			if event.Modifiers()&tcell.ModAlt != 0 {
+				data = rooms
+			} else {
+				row, _ := paneRooms.GetSelection()
+				if row < 0 || row >= len(rooms) {
+					return
+				}
+				data = rooms[row]
+			}
+			file, err := ioutil.TempFile("", "dylive")
+			if err != nil {
+				return
+			}
+			defer os.Remove(file.Name())
+			defer file.Close()
+			e := json.NewEncoder(file)
+			e.SetIndent("", "  ")
+			e.SetEscapeHTML(false)
+			e.Encode(data)
+			editor := os.Getenv("EDITOR")
+			if editor == "" {
+				if _, err := exec.LookPath("vim"); err == nil {
+					editor = "vim"
+				} else {
+					editor = "vi"
+				}
+			}
+			cmd := exec.Command(editor, file.Name())
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Run()
+		})
+		return nil
 	case tcell.KeyEnter:
 		lastEnterWithAlt = event.Modifiers() == tcell.ModAlt
 	case tcell.KeyLeft, tcell.KeyBacktab:
@@ -376,6 +414,7 @@ func getHelpMessages() []string {
 		"[darkcyan]Alt+Up/Down[white] 切换子分类",
 		fmt.Sprintf("[darkcyan]Enter[white] 在%s打开", vp),
 		"[darkcyan]Alt-Enter[white] 在浏览器打开",
+		"[darkcyan]Ctrl-(Alt)-E[white] 在编辑器打开",
 	}
 }
 
