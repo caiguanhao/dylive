@@ -23,8 +23,10 @@ var (
 	paneRooms   *tview.Table
 	paneStatus  *tview.TextView
 
-	paneSubCatsLoading *verticalText
-	paneRoomsLoading   *verticalText
+	paneSubCatsLoading *tview.TextView
+	paneRoomsLoading   *tview.TextView
+
+	paneRoomsShowRoomName bool
 
 	categories []dylive.Category
 	rooms      []dylive.Room
@@ -79,13 +81,24 @@ func main() {
 		SetSelectedFunc(func(row, column int) {
 			selectRoom(row)
 		})
+	paneRooms.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		if showRoomName := w > 60; paneRoomsShowRoomName != showRoomName {
+			paneRoomsShowRoomName = showRoomName
+			renderRooms()
+		}
+		return x, y, w, h
+	})
 
-	paneSubCatsLoading = &verticalText{
-		tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter),
-	}
-	paneRoomsLoading = &verticalText{
-		tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter),
-	}
+	paneSubCatsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
+	paneSubCatsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		y += h / 2
+		return x, y, w, h
+	})
+	paneRoomsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
+	paneRoomsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		y += h / 2
+		return x, y, w, h
+	})
 
 	grid = tview.NewGrid().
 		SetRows(1, 0, 1).
@@ -161,6 +174,11 @@ func getRooms(id, name string) {
 		return
 	}
 	paneStatus.SetText(fmt.Sprintf("成功获取「%s」的直播列表", name))
+	renderRooms()
+	app.Draw()
+	app.SetFocus(paneRooms)
+}
+func renderRooms() {
 	paneRooms.Clear()
 	paneRooms.Select(0, 0)
 	for i, room := range rooms {
@@ -173,7 +191,9 @@ func getRooms(id, name string) {
 		paneRooms.SetCell(i, 0, tview.NewTableCell("[darkcyan]"+key+"[white]").SetExpansion(1))
 		paneRooms.SetCell(i, 1, tview.NewTableCell(room.User.Name).SetExpansion(2))
 		paneRooms.SetCell(i, 2, tview.NewTableCell(room.CurrentUsersCount).SetExpansion(2))
-		paneRooms.SetCell(i, 3, tview.NewTableCell(room.Name))
+		if paneRoomsShowRoomName {
+			paneRooms.SetCell(i, 3, tview.NewTableCell(room.Name))
+		}
 	}
 	if paneRoomsLoading != nil {
 		grid.RemoveItem(paneRoomsLoading)
@@ -184,8 +204,6 @@ func getRooms(id, name string) {
 		1, 1, // rowSpan, colSpan
 		0, 0, // minGridHeight, minGridWidth
 		false) // focus
-	app.Draw()
-	app.SetFocus(paneRooms)
 }
 
 func selectRoom(index int) {
@@ -319,14 +337,4 @@ func getHelp() string {
 	return fmt.Sprintf("[darkcyan]Alt+Up/Down[white] 切换分类  "+
 		"[darkcyan]Enter[white] 在%s打开  "+
 		"[darkcyan]Alt-Enter[white] 在浏览器打开", vp)
-}
-
-type verticalText struct {
-	*tview.TextView
-}
-
-func (t *verticalText) Draw(s tcell.Screen) {
-	_, _, _, height := t.TextView.GetRect()
-	t.TextView.SetBorderPadding(height/2, 0, 0, 0)
-	t.TextView.Draw(s)
 }
