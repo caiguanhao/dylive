@@ -51,6 +51,8 @@ var (
 	helps = []string{
 		"[darkcyan](Shift)+Tab[white] 切换主分类",
 		"[darkcyan]Alt+Up/Down[white] 切换子分类",
+		"[darkcyan]Space[white] 选择多个直播",
+		"[darkcyan]Alt+Space[white] 反向选择",
 		"[darkcyan]Enter[white] 播放器打开",
 		"[darkcyan]Alt-Enter[white] 浏览器打开",
 		"[darkcyan]Ctrl-(Alt)-E[white] 编辑器打开",
@@ -437,6 +439,13 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	if r == ' ' {
+		if event.Modifiers()&tcell.ModAlt != 0 {
+			for _, room := range rooms {
+				selectedRooms.toggle(room)
+			}
+			renderRooms()
+			return nil
+		}
 		row, _ := paneRooms.GetSelection()
 		if row < 0 || row >= len(rooms) {
 			return nil
