@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/caiguanhao/dylive"
@@ -23,6 +24,10 @@ var (
 
 	categories []dylive.Category
 	rooms      []dylive.Room
+)
+
+const (
+	extraKeys = `!@#$%^&*()-=[]\;',./_+{}|:"<>?`
 )
 
 func main() {
@@ -163,11 +168,13 @@ func selectCategory(cat *dylive.Category) {
 	if cat != nil {
 		var firstHandler func()
 		for i, subcat := range cat.Categories {
-			key := 'a' + rune(i)
-			if i > 51 {
-				key = rune("!@#$%^&*()"[i-52])
-			} else if i > 25 {
+			var key rune
+			if i < 26 {
+				key = 'a' + rune(i)
+			} else if i < 52 {
 				key = 'A' + rune(i-26)
+			} else if i < 52+len(extraKeys) {
+				key = rune(extraKeys[i-52])
 			}
 			id := subcat.Id
 			name := subcat.Name
@@ -210,7 +217,7 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 				paneCats.Highlight(strconv.Itoa(n))
 			}
 		}
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || strings.ContainsRune(extraKeys, r) {
 			app.SetFocus(paneSubCats)
 		}
 	}
