@@ -21,8 +21,9 @@ import (
 )
 
 var (
-	app  *tview.Application
-	grid *tview.Grid
+	app   *tview.Application
+	grid  *tview.Grid
+	pages *tview.Pages
 
 	paneCats    *tview.TextView
 	paneSubCats *tview.List
@@ -188,7 +189,10 @@ func main() {
 
 	go getCategories()
 
-	if err := app.SetRoot(grid, true).EnableMouse(true).Run(); err != nil {
+	pages = tview.NewPages()
+	pages.AddPage("grid", grid, true, true)
+
+	if err := app.SetRoot(pages, true).EnableMouse(true).Run(); err != nil {
 		panic(err)
 	}
 
@@ -294,6 +298,27 @@ func renderRooms() {
 }
 
 func selectRooms() {
+	if count := len(selectedRooms); count > 9 {
+		modal := tview.NewModal()
+		modal.SetText(fmt.Sprintf("确定要打开 %d 个直播吗？", count)).
+			AddButtons([]string{
+				"确定",
+				"取消",
+			}).SetFocus(1).SetDoneFunc(func(index int, label string) {
+			if index == 0 {
+				selectRoomsForce()
+			}
+			pages.RemovePage("modal")
+			app.SetFocus(paneRooms)
+		})
+		pages.AddPage("modal", modal, false, false)
+		pages.ShowPage("modal")
+		return
+	}
+	selectRoomsForce()
+}
+
+func selectRoomsForce() {
 	size := len(selectedRooms)
 	for i, room := range selectedRooms {
 		selectRoom(room, i, size)
@@ -450,6 +475,9 @@ func renderSubcats(keepCurrentSelection bool) (firstHandler func()) {
 }
 
 func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
+	if pages.HasPage("modal") {
+		return event
+	}
 	r := event.Rune()
 	key := event.Key()
 	if r == '?' {
