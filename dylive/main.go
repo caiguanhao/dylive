@@ -170,7 +170,7 @@ func getRooms(id, name string) {
 		} else if i < 35 {
 			key = "alt-" + string('a'+i-9)
 		}
-		paneRooms.SetCell(i, 0, tview.NewTableCell(key).SetExpansion(1))
+		paneRooms.SetCell(i, 0, tview.NewTableCell("[darkcyan]"+key+"[white]").SetExpansion(1))
 		paneRooms.SetCell(i, 1, tview.NewTableCell(room.User.Name).SetExpansion(2))
 		paneRooms.SetCell(i, 2, tview.NewTableCell(room.CurrentUsersCount).SetExpansion(2))
 		paneRooms.SetCell(i, 3, tview.NewTableCell(room.Name))
@@ -221,6 +221,7 @@ func selectCategory(cat *dylive.Category) {
 		paneSubCats = tview.NewList().
 			SetHighlightFullLine(true).
 			SetWrapAround(false).
+			SetShortcutColor(tcell.ColorDarkCyan).
 			ShowSecondaryText(false)
 
 		pane = paneSubCats
