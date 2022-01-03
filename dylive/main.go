@@ -223,15 +223,16 @@ func getCategories() {
 		return
 	}
 	go updateStatus("成功获取分类", 0)
-	renderCategories()
-	n := "1"
-	for i, cat := range categories {
-		if cat.Name == currentConfig.DefaultCategory {
-			n = strconv.Itoa(i + 1)
+	app.QueueUpdateDraw(func() {
+		renderCategories()
+		n := "1"
+		for i, cat := range categories {
+			if cat.Name == currentConfig.DefaultCategory {
+				n = strconv.Itoa(i + 1)
+			}
 		}
-	}
-	paneCats.Highlight(n)
-	app.Draw()
+		paneCats.Highlight(n)
+	})
 }
 
 func renderCategories() {
@@ -263,10 +264,11 @@ func getRooms(id, name string) {
 	}
 	currentConfig.DefaultSubCategory = name
 	go updateStatus(fmt.Sprintf("成功获取「%s」的直播列表", name), 1*time.Second)
-	paneRooms.Select(0, 0)
-	renderRooms()
-	app.Draw()
-	app.SetFocus(paneRooms)
+	app.QueueUpdateDraw(func() {
+		paneRooms.Select(0, 0)
+		renderRooms()
+		app.SetFocus(paneRooms)
+	})
 }
 func renderRooms() {
 	paneRooms.Clear()
@@ -599,8 +601,9 @@ func monitorStatus() {
 	for {
 		select {
 		case status := <-statusChan:
-			paneStatus.SetText(status.text)
-			app.Draw()
+			app.QueueUpdateDraw(func() {
+				paneStatus.SetText(status.text)
+			})
 			time.Sleep(status.wait)
 		}
 	}
