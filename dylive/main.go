@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -37,9 +39,10 @@ var (
 
 	lastEnterWithAlt bool
 
-	videoPlayer string
-	helps       []string
-	currentHelp int = -1
+	videoPlayer   string
+	helps         []string
+	currentHelp   int = -1
+	currentConfig config
 
 	statusChan = make(chan status)
 )
@@ -49,7 +52,22 @@ const (
 	extraKeys = `!@#$%^&*()-=[]\;',./_+{}|:"<>`
 )
 
+type config struct {
+	DefaultCategory    string
+	DefaultSubCategory string
+}
+
 func main() {
+	defaultConfigFile := ".dylive.json"
+	if home, _ := os.UserHomeDir(); home != "" {
+		defaultConfigFile = filepath.Join(home, defaultConfigFile)
+	}
+	configFile := flag.String("c", defaultConfigFile, "config file location")
+	flag.Parse()
+
+	cfdata, _ := ioutil.ReadFile(*configFile)
+	json.Unmarshal(cfdata, &currentConfig)
+
 	videoPlayer = findVideoPlayer()
 	helps = getHelpMessages()
 
@@ -157,6 +175,9 @@ func main() {
 	if err := app.SetRoot(grid, true).EnableMouse(true).Run(); err != nil {
 		panic(err)
 	}
+
+	cfdata, _ = json.MarshalIndent(currentConfig, "", "  ")
+	ioutil.WriteFile(*configFile, cfdata, 0644)
 }
 
 func getCurrentCategoryNumber() int {
@@ -183,7 +204,13 @@ func getCategories() {
 	}
 	go updateStatus("成功获取分类", 0)
 	renderCategories()
-	paneCats.Highlight("1")
+	n := "1"
+	for i, cat := range categories {
+		if cat.Name == currentConfig.DefaultCategory {
+			n = strconv.Itoa(i + 1)
+		}
+	}
+	paneCats.Highlight(n)
 	app.Draw()
 }
 
@@ -214,6 +241,7 @@ func getRooms(id, name string) {
 		go updateStatus(err.Error(), 0)
 		return
 	}
+	currentConfig.DefaultSubCategory = name
 	go updateStatus(fmt.Sprintf("成功获取「%s」的直播列表", name), 1*time.Second)
 	renderRooms()
 	app.Draw()
@@ -268,6 +296,8 @@ func selectCategory(cat *dylive.Category) {
 	if cat == nil {
 		pane = paneSubCatsLoading
 	} else {
+		currentConfig.DefaultCategory = cat.Name
+
 		if paneSubCatsLoading != nil {
 			grid.RemoveItem(paneSubCatsLoading)
 			paneSubCatsLoading = nil
@@ -304,6 +334,10 @@ func selectCategory(cat *dylive.Category) {
 				firstHandler = handler
 			}
 			paneSubCats.AddItem(name, "", key, handler)
+			if name == currentConfig.DefaultSubCategory {
+				paneSubCats.SetCurrentItem(i)
+				firstHandler = handler
+			}
 		}
 		if firstHandler != nil {
 			firstHandler()
