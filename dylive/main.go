@@ -43,6 +43,7 @@ var (
 
 	lastEnterWithAlt bool
 
+	currentCat    *dylive.Category
 	currentHelp   int = -1
 	currentConfig config
 
@@ -93,7 +94,8 @@ func main() {
 			idx, _ := strconv.Atoi(added[0])
 			idx = idx - 1
 			if idx > -1 && idx < len(categories) {
-				selectCategory(&categories[idx])
+				currentCat = &categories[idx]
+				selectCategory()
 			}
 		})
 	paneCats.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
@@ -181,7 +183,8 @@ func main() {
 		return x, y, w, h
 	})
 
-	selectCategory(nil)
+	currentCat = nil
+	selectCategory()
 
 	go getCategories()
 
@@ -370,13 +373,13 @@ func selectRoom(room dylive.Room, nth, total int) {
 	}
 }
 
-func selectCategory(cat *dylive.Category) {
+func selectCategory() {
 	var pane tview.Primitive
 
-	if cat == nil {
+	if currentCat == nil {
 		pane = paneSubCatsLoading
 	} else {
-		currentConfig.DefaultCategory = cat.Name
+		currentConfig.DefaultCategory = currentCat.Name
 
 		if paneSubCatsLoading != nil {
 			grid.RemoveItem(paneSubCatsLoading)
@@ -393,35 +396,12 @@ func selectCategory(cat *dylive.Category) {
 			SetShortcutColor(tcell.ColorDarkCyan).
 			ShowSecondaryText(false)
 
-		pane = paneSubCats
-
-		var firstHandler func()
-		for i, subcat := range cat.Categories {
-			var key rune
-			if i < 26 {
-				key = 'a' + rune(i)
-			} else if i < 52 {
-				key = 'A' + rune(i-26)
-			} else if i < 52+len(extraKeys) {
-				key = rune(extraKeys[i-52])
-			}
-			id := subcat.Id
-			name := subcat.Name
-			handler := func() {
-				go getRooms(id, name)
-			}
-			if firstHandler == nil {
-				firstHandler = handler
-			}
-			paneSubCats.AddItem(name, "", key, handler)
-			if name == currentConfig.DefaultSubCategory {
-				paneSubCats.SetCurrentItem(i)
-				firstHandler = handler
-			}
-		}
+		firstHandler := renderSubcats(false)
 		if firstHandler != nil {
 			firstHandler()
 		}
+
+		pane = paneSubCats
 	}
 
 	grid.AddItem(pane,
@@ -429,6 +409,44 @@ func selectCategory(cat *dylive.Category) {
 		1, 1, // rowSpan, colSpan
 		0, 0, // minGridHeight, minGridWidth
 		false) // focus
+}
+
+func renderSubcats(keepCurrentSelection bool) (firstHandler func()) {
+	idx := paneSubCats.GetCurrentItem()
+	paneSubCats.Clear()
+	for i, subcat := range currentCat.Categories {
+		var key rune
+		if i < 26 {
+			key = 'a' + rune(i)
+		} else if i < 52 {
+			key = 'A' + rune(i-26)
+		} else if i < 52+len(extraKeys) {
+			key = rune(extraKeys[i-52])
+		}
+		id := subcat.Id
+		count := selectedRooms.count(subcat.Name)
+		var name string
+		if count > 0 {
+			name = fmt.Sprintf("%s (%d)", subcat.Name, count)
+		} else {
+			name = subcat.Name
+		}
+		handler := func() {
+			go getRooms(id, name)
+		}
+		if firstHandler == nil {
+			firstHandler = handler
+		}
+		paneSubCats.AddItem(name, "", key, handler)
+		if name == currentConfig.DefaultSubCategory {
+			paneSubCats.SetCurrentItem(i)
+			firstHandler = handler
+		}
+	}
+	if keepCurrentSelection {
+		paneSubCats.SetCurrentItem(idx)
+	}
+	return
 }
 
 func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
@@ -444,6 +462,7 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 				selectedRooms.toggle(room)
 			}
 			renderRooms()
+			renderSubcats(true)
 			return nil
 		}
 		row, _ := paneRooms.GetSelection()
@@ -452,6 +471,7 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		}
 		selectedRooms.toggle(rooms[row])
 		renderRooms()
+		renderSubcats(true)
 		return nil
 	}
 	if key >= tcell.KeyF1 && key <= tcell.KeyF12 {
@@ -603,6 +623,20 @@ func (s selections) has(i dylive.Room) bool {
 		}
 	}
 	return false
+}
+
+func (s selections) count(subCatName string) int {
+	total := 0
+outer:
+	for _, a := range s {
+		for _, c := range a.Category.Categories {
+			if c.Name == subCatName {
+				total += 1
+				continue outer
+			}
+		}
+	}
+	return total
 }
 
 func arrange(size int) (rows, cols int) {

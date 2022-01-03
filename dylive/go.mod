@@ -3,7 +3,7 @@ module github.com/caiguanhao/dylive/dylive
 go 1.17
 
 require (
-	github.com/caiguanhao/dylive v0.0.0-20220102134435-868fb8264aab
+	github.com/caiguanhao/dylive v0.0.0-20220103132255-da8d89d29a87
 	github.com/gdamore/tcell/v2 v2.4.1-0.20210905002822-f057f0a857a1
 	github.com/rivo/tview v0.0.0-20211202162923-2a6de950f73b
 )
