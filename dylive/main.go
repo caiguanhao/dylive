@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -27,6 +28,10 @@ var (
 
 	categories []dylive.Category
 	rooms      []dylive.Room
+
+	lastEnterWithAlt bool
+
+	videoPlayer string
 )
 
 const (
@@ -35,6 +40,8 @@ const (
 )
 
 func main() {
+	videoPlayer = findVideoPlayer()
+
 	app = tview.NewApplication()
 
 	app.SetInputCapture(onKeyPressed)
@@ -54,6 +61,17 @@ func main() {
 		})
 
 	paneStatus = tview.NewTextView()
+	paneStatus.SetBorderPadding(0, 0, 1, 1)
+
+	paneHelp := tview.NewTextView().
+		SetTextAlign(tview.AlignRight).
+		SetDynamicColors(true)
+	paneHelp.SetBorderPadding(0, 0, 1, 1)
+	paneHelp.SetText(getHelp())
+
+	paneFooter := tview.NewFlex().
+		AddItem(paneStatus, 0, 1, false).
+		AddItem(paneHelp, 0, 1, false)
 
 	paneRooms = tview.NewTable().
 		SetSelectable(true, false).
@@ -83,7 +101,7 @@ func main() {
 			1, 1, // rowSpan, colSpan
 			0, 0, // minGridHeight, minGridWidth
 			false). // focus
-		AddItem(paneStatus,
+		AddItem(paneFooter,
 			2, 0, // row, column
 			1, 2, // rowSpan, colSpan
 			0, 0, // minGridHeight, minGridWidth
@@ -165,13 +183,23 @@ func getRooms(id, name string) {
 		1, 1, // row, column
 		1, 1, // rowSpan, colSpan
 		0, 0, // minGridHeight, minGridWidth
-		true) // focus
+		false) // focus
 	app.Draw()
+	app.SetFocus(paneRooms)
 }
 
 func selectRoom(index int) {
-	if index > -1 && index < len(rooms) {
-		exec.Command("open", "-na", "IINA", rooms[index].StreamUrl).Start()
+	if index < 0 || index >= len(rooms) {
+		return
+	}
+	stream := rooms[index].StreamUrl
+	web := rooms[index].WebUrl
+	if _, err := exec.LookPath("open"); err == nil {
+		if lastEnterWithAlt == false && videoPlayer != "" {
+			exec.Command("open", "-na", videoPlayer, stream).Start()
+			return
+		}
+		exec.Command("open", web).Start()
 	}
 }
 
@@ -253,6 +281,8 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 	switch event.Key() {
+	case tcell.KeyEnter:
+		lastEnterWithAlt = event.Modifiers() == tcell.ModAlt
 	case tcell.KeyLeft, tcell.KeyBacktab:
 		if n := getCurrentCategoryNumber(); n > 1 {
 			paneCats.Highlight(strconv.Itoa(n - 1))
@@ -269,6 +299,25 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 	return event
+}
+
+func findVideoPlayer() string {
+	if _, err := os.Stat("/Applications/IINA.app"); !os.IsNotExist(err) {
+		return "IINA"
+	} else if _, err := os.Stat("/Applications/VLC.app"); !os.IsNotExist(err) {
+		return "VLC"
+	}
+	return ""
+}
+
+func getHelp() string {
+	vp := videoPlayer
+	if vp == "" {
+		vp = "默认程序"
+	}
+	return fmt.Sprintf("[darkcyan]Alt+Up/Down[white] 切换分类  "+
+		"[darkcyan]Enter[white] 在%s打开  "+
+		"[darkcyan]Alt-Enter[white] 在浏览器打开", vp)
 }
 
 type verticalText struct {
