@@ -117,6 +117,7 @@ type (
 		StreamUrl         string
 		CurrentUsersCount string
 		TotalUsersCount   string
+		Category          Category
 		User              User
 	}
 
@@ -145,6 +146,18 @@ type (
 					Avatar    string `json:"avatar"`
 				} `json:"data"`
 			} `json:"roomsData"`
+			PartitionData struct {
+				Partition struct {
+					IDStr string `json:"id_str"`
+					Type  int    `json:"type"`
+					Title string `json:"title"`
+				} `json:"partition"`
+				SelectPartition struct {
+					IDStr string `json:"id_str"`
+					Type  int    `json:"type"`
+					Title string `json:"title"`
+				} `json:"select_partition"`
+			} `json:"partitionData"`
 		} `json:"routeInitialProps"`
 	}
 )
@@ -162,6 +175,8 @@ func GetRoomsByCategory(ctx context.Context, categoryId string) ([]Room, error) 
 	}
 	var rooms []Room
 	for _, room := range cat.RouteInitialProps.RoomsData.Data {
+		p := cat.RouteInitialProps.PartitionData.Partition
+		c := cat.RouteInitialProps.PartitionData.SelectPartition
 		rooms = append(rooms, Room{
 			Name:              room.Room.Title,
 			CoverUrl:          room.Cover,
@@ -169,6 +184,16 @@ func GetRoomsByCategory(ctx context.Context, categoryId string) ([]Room, error) 
 			StreamUrl:         room.StreamSrc,
 			CurrentUsersCount: room.Room.Stats.UserCountStr,
 			TotalUsersCount:   room.Room.Stats.TotalUserStr,
+			Category: Category{
+				Id:   fmt.Sprintf("%d_%s", p.Type, p.IDStr),
+				Name: p.Title,
+				Categories: []Category{
+					{
+						Id:   fmt.Sprintf("%d_%s_%d_%s", p.Type, p.IDStr, c.Type, c.IDStr),
+						Name: c.Title,
+					},
+				},
+			},
 			User: User{
 				Name:    room.Room.Owner.Nickname,
 				Picture: room.Avatar,
