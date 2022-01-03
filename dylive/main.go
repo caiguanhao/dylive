@@ -57,17 +57,20 @@ func main() {
 		SetColumns(30, 0).
 		SetBorders(true).
 		AddItem(paneCats,
-			/* row           */ 0 /* column       */, 0,
-			/* rowSpan       */ 1 /* colSpan      */, 2,
-			/* minGridHeight */ 0 /* minGridWidth */, 0 /* focus */, false).
+			0, 0, // row, column
+			1, 2, // rowSpan, colSpan
+			0, 0, // minGridHeight, minGridWidth
+			false). // focus
 		AddItem(paneStatus,
-			/* row           */ 2 /* column       */, 0,
-			/* rowSpan       */ 1 /* colSpan      */, 2,
-			/* minGridHeight */ 0 /* minGridWidth */, 0 /* focus */, false).
+			2, 0, // row, column
+			1, 2, // rowSpan, colSpan
+			0, 0, // minGridHeight, minGridWidth
+			false). // focus
 		AddItem(paneRooms,
-			/* row           */ 1 /* column       */, 1,
-			/* rowSpan       */ 1 /* colSpan      */, 1,
-			/* minGridHeight */ 0 /* minGridWidth */, 0 /* focus */, false)
+			1, 1, // row, column
+			1, 1, // rowSpan, colSpan
+			0, 0, // minGridHeight, minGridWidth
+			false) // focus
 
 	selectCategory(nil)
 
@@ -181,16 +184,11 @@ func selectCategory(cat *dylive.Category) {
 		}
 	}
 
-	grid.AddItem(
-		paneSubCats,
-		1,     // row
-		0,     // column
-		1,     // rowSpan
-		1,     // colSpan
-		0,     // minGridHeight
-		0,     // minGridWidth
-		false, // focus
-	)
+	grid.AddItem(paneSubCats,
+		1, 0, // row, column
+		1, 1, // rowSpan, colSpan
+		0, 0, // minGridHeight, minGridWidth
+		false) // focus
 }
 
 func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
