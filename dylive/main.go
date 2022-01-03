@@ -38,6 +38,8 @@ var (
 	videoPlayer string
 	helps       []string
 	currentHelp int = -1
+
+	statusChan = make(chan status)
 )
 
 const (
@@ -75,6 +77,7 @@ func main() {
 
 	paneStatus = tview.NewTextView()
 	paneStatus.SetBorderPadding(0, 0, 1, 1)
+	go monitorStatus()
 
 	paneHelp = tview.NewTextView().
 		SetTextAlign(tview.AlignRight).
@@ -89,6 +92,12 @@ func main() {
 	paneRooms = tview.NewTable().
 		SetSelectable(true, false).
 		SetBorders(false).
+		SetSelectionChangedFunc(func(row, column int) {
+			if row < 0 || row >= len(rooms) {
+				return
+			}
+			go updateStatus(rooms[row].WebUrl, 0)
+		}).
 		SetSelectedFunc(func(row, column int) {
 			selectRoom(row)
 		})
@@ -161,16 +170,16 @@ func getCurrentCategoryNumber() int {
 }
 
 func getCategories() {
-	paneStatus.SetText("正在获取分类…")
+	go updateStatus("正在获取分类…", 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var err error
 	categories, err = dylive.GetCategories(ctx)
 	if err != nil {
-		paneStatus.SetText(err.Error())
+		go updateStatus(err.Error(), 0)
 		return
 	}
-	paneStatus.SetText("成功获取分类")
+	go updateStatus("成功获取分类", 0)
 	renderCategories()
 	paneCats.Highlight("1")
 	app.Draw()
@@ -194,16 +203,16 @@ func renderCategories() {
 }
 
 func getRooms(id, name string) {
-	paneStatus.SetText(fmt.Sprintf("正在获取「%s」的直播列表…", name))
+	go updateStatus(fmt.Sprintf("正在获取「%s」的直播列表…", name), 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var err error
 	rooms, err = dylive.GetRoomsByCategory(ctx, id)
 	if err != nil {
-		paneStatus.SetText(err.Error())
+		go updateStatus(err.Error(), 0)
 		return
 	}
-	paneStatus.SetText(fmt.Sprintf("成功获取「%s」的直播列表", name))
+	go updateStatus(fmt.Sprintf("成功获取「%s」的直播列表", name), 1*time.Second)
 	renderRooms()
 	app.Draw()
 	app.SetFocus(paneRooms)
@@ -382,4 +391,24 @@ func nextHelpMessage() {
 	if currentHelp >= len(helps) {
 		currentHelp = -1
 	}
+}
+
+type status struct {
+	text string
+	wait time.Duration
+}
+
+func monitorStatus() {
+	for {
+		select {
+		case status := <-statusChan:
+			paneStatus.SetText(status.text)
+			app.Draw()
+			time.Sleep(status.wait)
+		}
+	}
+}
+
+func updateStatus(text string, wait time.Duration) {
+	statusChan <- status{text: text, wait: wait}
 }
