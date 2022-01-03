@@ -22,6 +22,7 @@ var (
 	paneSubCats *tview.List
 	paneRooms   *tview.Table
 	paneStatus  *tview.TextView
+	paneHelp    *tview.TextView
 
 	paneSubCatsLoading *tview.TextView
 	paneRoomsLoading   *tview.TextView
@@ -34,15 +35,18 @@ var (
 	lastEnterWithAlt bool
 
 	videoPlayer string
+	helps       []string
+	currentHelp int = -1
 )
 
 const (
 	title     = "dylive"
-	extraKeys = `!@#$%^&*()-=[]\;',./_+{}|:"<>?`
+	extraKeys = `!@#$%^&*()-=[]\;',./_+{}|:"<>`
 )
 
 func main() {
 	videoPlayer = findVideoPlayer()
+	helps = getHelpMessages()
 
 	app = tview.NewApplication()
 
@@ -65,11 +69,11 @@ func main() {
 	paneStatus = tview.NewTextView()
 	paneStatus.SetBorderPadding(0, 0, 1, 1)
 
-	paneHelp := tview.NewTextView().
+	paneHelp = tview.NewTextView().
 		SetTextAlign(tview.AlignRight).
 		SetDynamicColors(true)
 	paneHelp.SetBorderPadding(0, 0, 1, 1)
-	paneHelp.SetText(getHelp())
+	nextHelpMessage()
 
 	paneFooter := tview.NewFlex().
 		AddItem(paneStatus, 0, 1, false).
@@ -101,8 +105,6 @@ func main() {
 	})
 
 	grid = tview.NewGrid().
-		SetRows(1, 0, 1).
-		SetColumns(30, 0).
 		SetBorders(true).
 		AddItem(paneCats,
 			0, 0, // row, column
@@ -121,6 +123,7 @@ func main() {
 			false) // focus
 
 	grid.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		grid.SetRows(1, 0, 1)
 		w1 := w / 3
 		if w1 > 30 {
 			w1 = 30
@@ -287,6 +290,10 @@ func selectCategory(cat *dylive.Category) {
 
 func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 	r := event.Rune()
+	if r == '?' {
+		nextHelpMessage()
+		return event
+	}
 	if event.Modifiers() == tcell.ModAlt {
 		if r >= '1' && r <= '9' {
 			idx := int(r - '1')
@@ -338,12 +345,29 @@ func findVideoPlayer() string {
 	return ""
 }
 
-func getHelp() string {
+func getHelpMessages() []string {
 	vp := videoPlayer
 	if vp == "" {
 		vp = "默认程序"
 	}
-	return fmt.Sprintf("[darkcyan]Alt+Up/Down[white] 切换分类  "+
-		"[darkcyan]Enter[white] 在%s打开  "+
-		"[darkcyan]Alt-Enter[white] 在浏览器打开", vp)
+	return []string{
+		"[darkcyan](Shift)+Tab[white] 切换主分类",
+		"[darkcyan]Alt+Up/Down[white] 切换子分类",
+		fmt.Sprintf("[darkcyan]Enter[white] 在%s打开", vp),
+		"[darkcyan]Alt-Enter[white] 在浏览器打开",
+	}
+}
+
+func nextHelpMessage() {
+	paneHelp.Clear()
+	if currentHelp > -1 {
+		fmt.Fprint(paneHelp, helps[currentHelp], "  ")
+		fmt.Fprint(paneHelp, `[darkcyan]?[white] 下个帮助`)
+	} else {
+		fmt.Fprint(paneHelp, `[darkcyan]?[white] 显示帮助`)
+	}
+	currentHelp += 1
+	if currentHelp >= len(helps) {
+		currentHelp = -1
+	}
 }
