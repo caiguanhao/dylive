@@ -48,16 +48,19 @@ var (
 	currentHelp   int = -1
 	currentConfig config
 
+	color         string
+	defeaultColor = "lightgreen"
+
 	statusChan = make(chan status)
 
-	helps = []string{
-		"[darkcyan](Shift)+Tab[white] 切换主分类",
-		"[darkcyan]Alt+Up/Down[white] 切换子分类",
-		"[darkcyan]Space[white] 选择多个直播",
-		"[darkcyan]Alt+Space[white] 反向选择",
-		"[darkcyan]Enter[white] 播放器打开",
-		"[darkcyan]Alt-Enter[white] 浏览器打开",
-		"[darkcyan]Ctrl-(Alt)-E[white] 编辑器打开",
+	helps = [][]string{
+		{"(Shift)+Tab", "切换主分类"},
+		{"Alt+Up/Down", "切换子分类"},
+		{"Space", "选择多个直播"},
+		{"Alt+Space", "反向选择"},
+		{"Enter", "播放器打开"},
+		{"Alt-Enter", "浏览器打开"},
+		{"Ctrl-(Alt)-E", "编辑器打开"},
 	}
 )
 
@@ -77,7 +80,27 @@ func main() {
 		defaultConfigFile = filepath.Join(home, defaultConfigFile)
 	}
 	configFile := flag.String("c", defaultConfigFile, "config file location")
+	flag.Usage = func() {
+		o := flag.CommandLine.Output()
+		fmt.Fprintln(o, "Usage:", path.Base(os.Args[0]), "[options] -- [player arguments]")
+		flag.PrintDefaults()
+		fmt.Fprintln(o)
+		fmt.Fprintln(o, "EnvVars:")
+		fmt.Fprintln(o, "  PLAYER - video player, defaults to mpv and iina-cli")
+		fmt.Fprintln(o, "  EDITOR - text editor, defaults to vim or vi")
+		fmt.Fprintln(o, "  COLOR  - color for keys, defaults to", defeaultColor)
+		fmt.Fprintln(o, "           https://github.com/gdamore/tcell/blob/v2.4.0/color.go#L845")
+		fmt.Fprintln(o)
+		fmt.Fprintln(o, "Keys:")
+		for _, h := range helps {
+			fmt.Fprintf(o, "  %-12s - %s\n", h[0], h[1])
+		}
+	}
 	flag.Parse()
+
+	if color = os.Getenv("COLOR"); color == "" {
+		color = defeaultColor
+	}
 
 	cfdata, _ := ioutil.ReadFile(*configFile)
 	json.Unmarshal(cfdata, &currentConfig)
@@ -248,7 +271,7 @@ func renderCategories() {
 		if paneCatsShowKeys {
 			fmt.Fprintf(paneCats, `F%d `, i+1)
 		}
-		fmt.Fprintf(paneCats, `["%d"][darkcyan]%s[white][""]`, i+1, cat.Name)
+		fmt.Fprintf(paneCats, `["%d"][%s]%s[white][""]`, i+1, color, cat.Name)
 	}
 }
 
@@ -275,9 +298,9 @@ func renderRooms() {
 	for i, room := range rooms {
 		var key string
 		if selectedRooms.has(room) {
-			key = "[cyan]" + tview.Escape("[X]") + "[white]"
+			key = "[" + color + "]" + tview.Escape("[X]") + "[white]"
 		} else if i < 9 {
-			key = "[darkcyan](" + string('1'+byte(i)) + ")[white]"
+			key = "[" + color + "](" + string('1'+byte(i)) + ")[white]"
 		} else {
 			key = "   "
 		}
@@ -378,6 +401,7 @@ func selectRoom(room dylive.Room, nth, total int) {
 		if geometry := mpvGeometry(nth, total); geometry != "" {
 			args = append(args, "--geometry="+geometry)
 		}
+		args = append(args, flag.Args()...)
 		cmd = exec.Command(cmdName, args...)
 	case "iina":
 		args := []string{room.StreamUrl, "--", "--force-media-title=" + room.User.Name}
@@ -385,13 +409,16 @@ func selectRoom(room dylive.Room, nth, total int) {
 			args = append(args, "--geometry="+geometry)
 			time.Sleep(500 * time.Millisecond) // iina bug? open too fast will break
 		}
+		args = append(args, flag.Args()...)
 		cmd = exec.Command(cmdName, args...)
 		cmd.Stdin = os.Stdin
 	case "open":
 		cmd = exec.Command("open", "-na", cmdName, room.StreamUrl)
 	default:
 		if cmdName != "" {
-			cmd = exec.Command(cmdName, room.StreamUrl)
+			args := []string{room.StreamUrl}
+			args = append(args, flag.Args()...)
+			cmd = exec.Command(cmdName, args...)
 		}
 	}
 
@@ -420,7 +447,7 @@ func selectCategory() {
 		paneSubCats = tview.NewList().
 			SetHighlightFullLine(true).
 			SetWrapAround(false).
-			SetShortcutColor(tcell.ColorDarkCyan).
+			SetShortcutColor(tcell.GetColor(color)).
 			ShowSecondaryText(false)
 
 		firstHandler := renderSubcats(false)
@@ -581,10 +608,10 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 func nextHelpMessage() {
 	paneHelp.Clear()
 	if currentHelp > -1 {
-		fmt.Fprint(paneHelp, helps[currentHelp], "  ")
-		fmt.Fprint(paneHelp, `[darkcyan]?[white] 下个帮助`)
+		fmt.Fprint(paneHelp, "[", color, "]", helps[currentHelp][0], "[white] ", helps[currentHelp][1], "  ")
+		fmt.Fprint(paneHelp, "[", color, "]?[white] 下个帮助")
 	} else {
-		fmt.Fprint(paneHelp, `[darkcyan]?[white] 显示帮助`)
+		fmt.Fprint(paneHelp, "[", color, "]?[white] 显示帮助")
 	}
 	currentHelp += 1
 	if currentHelp >= len(helps) {
