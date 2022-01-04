@@ -57,12 +57,14 @@ var (
 
 	helps = [][]string{
 		{"(Shift)+Tab", "切换主分类"},
-		{"Alt+Up/Down", "切换子分类"},
+		{"Alt+Up/Down/PgUp/PgDn", "切换子分类"},
 		{"Space", "选择多个直播"},
-		{"Alt+Space", "反向选择"},
-		{"Enter", "播放器打开"},
-		{"Alt-Enter", "浏览器打开"},
-		{"Ctrl-(Alt)-E", "编辑器打开"},
+		{"Alt+Space", "当前页反向选择"},
+		{"Backspace", "取消所有选择"},
+		{"Enter", "播放器中打开"},
+		{"Alt-Enter", "浏览器中打开"},
+		{"Ctrl-(Alt)-E", "编辑器中查看信息"},
+		{"Ctrl-S", "编辑器中查看命令"},
 	}
 )
 
@@ -348,7 +350,7 @@ func selectRooms() {
 func selectRoomsForce() {
 	size := len(selectedRooms)
 	for i, room := range selectedRooms {
-		selectRoom(room, i, size)
+		selectRoom(room, i, size, false)
 	}
 }
 
@@ -357,13 +359,24 @@ func selectRoomByIndex(index int) {
 		return
 	}
 	room := rooms[index]
-	selectRoom(room, 0, 0)
+	selectRoom(room, 0, 0, false)
 }
 
-func selectRoom(room dylive.Room, nth, total int) {
+func roomsCommands() (cmds []string) {
+	size := len(selectedRooms)
+	for i, room := range selectedRooms {
+		cmds = append(cmds, selectRoom(room, i, size, true).String())
+	}
+	return cmds
+}
+
+func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
 	if lastEnterWithAlt == true {
-		exec.Command("open", room.WebUrl).Start()
-		return
+		cmd := exec.Command("open", room.WebUrl)
+		if noRun == false {
+			cmd.Start()
+		}
+		return cmd
 	}
 
 	var cmdType, cmdName string
@@ -424,9 +437,11 @@ func selectRoom(room dylive.Room, nth, total int) {
 		}
 	}
 
-	if cmd != nil {
+	if noRun == false && cmd != nil {
 		cmd.Start()
 	}
+
+	return cmd
 }
 
 func playerArgs(room dylive.Room, nth, total int) (out []string) {
@@ -574,6 +589,23 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		return event
 	}
 	switch key {
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		selectedRooms = nil
+		renderRooms()
+		renderSubcats(true)
+		return nil
+	case tcell.KeyCtrlS:
+		app.Suspend(func() {
+			editInEditor(func(file *os.File) {
+				fmt.Fprintln(file, "#!/bin/bash")
+				fmt.Fprintln(file)
+				fmt.Fprintln(file, "#", len(selectedRooms), "个直播")
+				fmt.Fprintln(file, "# 部分参数可能需要手动加双引号")
+				fmt.Fprintln(file)
+				fmt.Fprintln(file, strings.Join(roomsCommands(), "\n\n"))
+			})
+		})
+		return nil
 	case tcell.KeyCtrlE:
 		app.Suspend(func() {
 			var data interface{}
@@ -586,28 +618,12 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 				}
 				data = rooms[row]
 			}
-			file, err := ioutil.TempFile("", "dylive")
-			if err != nil {
-				return
-			}
-			defer os.Remove(file.Name())
-			defer file.Close()
-			e := json.NewEncoder(file)
-			e.SetIndent("", "  ")
-			e.SetEscapeHTML(false)
-			e.Encode(data)
-			editor := os.Getenv("EDITOR")
-			if editor == "" {
-				if commandExists("vim") {
-					editor = "vim"
-				} else {
-					editor = "vi"
-				}
-			}
-			cmd := exec.Command(editor, file.Name())
-			cmd.Stdin = os.Stdin
-			cmd.Stdout = os.Stdout
-			cmd.Run()
+			editInEditor(func(file *os.File) {
+				e := json.NewEncoder(file)
+				e.SetIndent("", "  ")
+				e.SetEscapeHTML(false)
+				e.Encode(data)
+			})
 		})
 		return nil
 	case tcell.KeyEnter:
@@ -628,6 +644,28 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 	return event
+}
+
+func editInEditor(f func(*os.File)) {
+	file, err := ioutil.TempFile("", "dylive")
+	if err != nil {
+		return
+	}
+	defer os.Remove(file.Name())
+	defer file.Close()
+	f(file)
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		if commandExists("vim") {
+			editor = "vim"
+		} else {
+			editor = "vi"
+		}
+	}
+	cmd := exec.Command(editor, file.Name())
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Run()
 }
 
 func nextHelpMessage() {
