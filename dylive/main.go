@@ -364,10 +364,18 @@ func selectRoomByIndex(index int) {
 
 func roomsCommands() (cmds []string) {
 	size := len(selectedRooms)
+	if size == 0 {
+		row, _ := paneRooms.GetSelection()
+		if row < 0 || row >= len(rooms) {
+			return
+		}
+		cmds = append(cmds, selectRoom(rooms[row], 0, 1, true).String())
+		return
+	}
 	for i, room := range selectedRooms {
 		cmds = append(cmds, selectRoom(room, i, size, true).String())
 	}
-	return cmds
+	return
 }
 
 func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
@@ -599,7 +607,9 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 			editInEditor(func(file *os.File) {
 				fmt.Fprintln(file, "#!/bin/bash")
 				fmt.Fprintln(file)
-				fmt.Fprintln(file, "#", len(selectedRooms), "个直播")
+				if len(selectedRooms) > 0 {
+					fmt.Fprintln(file, "#", len(selectedRooms), "个直播")
+				}
 				fmt.Fprintln(file, "# 部分参数可能需要手动加双引号")
 				fmt.Fprintln(file)
 				fmt.Fprintln(file, strings.Join(roomsCommands(), "\n\n"))
