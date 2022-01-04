@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/caiguanhao/dylive"
@@ -401,7 +403,7 @@ func selectRoom(room dylive.Room, nth, total int) {
 		if geometry := mpvGeometry(nth, total); geometry != "" {
 			args = append(args, "--geometry="+geometry)
 		}
-		args = append(args, flag.Args()...)
+		args = append(args, playerArgs(room, nth, total)...)
 		cmd = exec.Command(cmdName, args...)
 	case "iina":
 		args := []string{room.StreamUrl, "--", "--force-media-title=" + room.User.Name}
@@ -409,7 +411,7 @@ func selectRoom(room dylive.Room, nth, total int) {
 			args = append(args, "--geometry="+geometry)
 			time.Sleep(500 * time.Millisecond) // iina bug? open too fast will break
 		}
-		args = append(args, flag.Args()...)
+		args = append(args, playerArgs(room, nth, total)...)
 		cmd = exec.Command(cmdName, args...)
 		cmd.Stdin = os.Stdin
 	case "open":
@@ -417,7 +419,7 @@ func selectRoom(room dylive.Room, nth, total int) {
 	default:
 		if cmdName != "" {
 			args := []string{room.StreamUrl}
-			args = append(args, flag.Args()...)
+			args = append(args, playerArgs(room, nth, total)...)
 			cmd = exec.Command(cmdName, args...)
 		}
 	}
@@ -425,6 +427,29 @@ func selectRoom(room dylive.Room, nth, total int) {
 	if cmd != nil {
 		cmd.Start()
 	}
+}
+
+func playerArgs(room dylive.Room, nth, total int) (out []string) {
+	obj := struct {
+		dylive.Room
+		Index int
+		Nth   int
+		Total int
+	}{room, nth, nth + 1, total}
+	for _, arg := range flag.Args() {
+		tpl, err := template.New("").Parse(arg)
+		if err != nil {
+			out = append(out, arg)
+			continue
+		}
+		var buf bytes.Buffer
+		if tpl.Execute(&buf, obj) != nil {
+			out = append(out, arg)
+			continue
+		}
+		out = append(out, buf.String())
+	}
+	return
 }
 
 func selectCategory() {
