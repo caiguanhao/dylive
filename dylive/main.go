@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
@@ -52,6 +53,7 @@ var (
 
 	color         string
 	defeaultColor = "lightgreen"
+	borderless    = runtime.GOOS == "windows"
 
 	statusChan = make(chan status)
 
@@ -135,13 +137,17 @@ func main() {
 	})
 
 	paneStatus = tview.NewTextView()
-	paneStatus.SetBorderPadding(0, 0, 1, 1)
+	if !borderless {
+		paneStatus.SetBorderPadding(0, 0, 1, 1)
+	}
 	go monitorStatus()
 
 	paneHelp = tview.NewTextView().
 		SetTextAlign(tview.AlignRight).
 		SetDynamicColors(true)
-	paneHelp.SetBorderPadding(0, 0, 1, 1)
+	if !borderless {
+		paneHelp.SetBorderPadding(0, 0, 1, 1)
+	}
 	nextHelpMessage()
 
 	paneFooter := tview.NewFlex().
@@ -169,6 +175,10 @@ func main() {
 			paneRoomsShowRoomName = showRoomName
 			renderRooms()
 		}
+		if borderless {
+			x += 1
+			w -= 1
+		}
 		return x, y, w, h
 	})
 
@@ -184,7 +194,7 @@ func main() {
 	})
 
 	grid = tview.NewGrid().
-		SetBorders(true).
+		SetBorders(!borderless).
 		AddItem(paneCats,
 			0, 0, // row, column
 			1, 2, // rowSpan, colSpan
