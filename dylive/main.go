@@ -53,7 +53,8 @@ var (
 
 	color         string
 	defeaultColor = "lightgreen"
-	borderless    = runtime.GOOS == "windows"
+	isWindows     = runtime.GOOS == "windows"
+	borderless    = isWindows
 
 	statusChan = make(chan status)
 
@@ -613,7 +614,7 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		renderSubcats(true)
 		return nil
 	case tcell.KeyCtrlS:
-		app.Suspend(func() {
+		suspend(func() {
 			editInEditor(func(file *os.File) {
 				fmt.Fprintln(file, "#!/bin/bash")
 				fmt.Fprintln(file)
@@ -627,7 +628,7 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		})
 		return nil
 	case tcell.KeyCtrlE:
-		app.Suspend(func() {
+		suspend(func() {
 			var data interface{}
 			if event.Modifiers()&tcell.ModAlt != 0 {
 				data = rooms
@@ -676,15 +677,21 @@ func editInEditor(f func(*os.File)) {
 	f(file)
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
-		if commandExists("vim") {
-			editor = "vim"
+		if isWindows {
+			editor = "notepad"
 		} else {
-			editor = "vi"
+			if commandExists("vim") {
+				editor = "vim"
+			} else {
+				editor = "vi"
+			}
 		}
 	}
 	cmd := exec.Command(editor, file.Name())
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
+	if !isWindows {
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+	}
 	cmd.Run()
 }
 
@@ -798,4 +805,13 @@ func mpvGeometry(nth, size int) string {
 	x := nth % cols * cp
 	y := nth / cols * rp
 	return fmt.Sprintf("%d%%+%d%%+%d%%", w, x, y)
+}
+
+// app.Suspend could cause freeze problem on Windows
+func suspend(f func()) {
+	if isWindows {
+		f()
+	} else {
+		app.Suspend(f)
+	}
 }
