@@ -11,11 +11,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
 	"time"
+	"unsafe"
 
 	"github.com/caiguanhao/dylive"
 	"github.com/gdamore/tcell/v2"
@@ -384,6 +386,17 @@ func renderRooms() {
 func selectRooms() {
 	if count := len(selectedRooms); count > 9 {
 		modal := tview.NewModal()
+		modal.SetBackgroundColor(tcell.ColorBlue)
+		modal.SetButtonBackgroundColor(tcell.ColorBlue)
+		if borderless {
+			// hack
+			field := reflect.ValueOf(modal).Elem().FieldByName("frame")
+			iFrame := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface()
+			if frame, ok := iFrame.(*tview.Frame); ok {
+				frame.SetBorder(false)
+				frame.SetBorderPadding(2, 0, 0, 0)
+			}
+		}
 		modal.SetText(fmt.Sprintf("确定要打开 %d 个直播吗？", count)).
 			AddButtons([]string{
 				"确定",
