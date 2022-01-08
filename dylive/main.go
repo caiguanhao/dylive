@@ -50,6 +50,7 @@ var (
 	lastMouseClick   time.Time
 
 	currentCat    *dylive.Category
+	currentSubCat *dylive.Category
 	currentHelp   int = -1
 	currentConfig config
 
@@ -70,6 +71,7 @@ var (
 		{"Alt-Enter", "浏览器中打开"},
 		{"Ctrl+(Alt)+E", "编辑器中查看信息"},
 		{"Ctrl-S", "编辑器中查看命令"},
+		{"Ctrl+(Alt)+R", "重新加载"},
 	}
 )
 
@@ -239,27 +241,11 @@ func main() {
 		return action, event
 	})
 
-	paneSubCatsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
-	paneSubCatsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		y += h / 2
-		return x, y, w, h
-	})
-	paneRoomsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
-	paneRoomsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		y += h / 2
-		return x, y, w, h
-	})
-
 	grid = tview.NewGrid().
 		SetBorders(!borderless).
 		AddItem(paneCats,
 			0, 0, // row, column
 			1, 2, // rowSpan, colSpan
-			0, 0, // minGridHeight, minGridWidth
-			false). // focus
-		AddItem(paneRoomsLoading,
-			1, 1, // row, column
-			1, 1, // rowSpan, colSpan
 			0, 0, // minGridHeight, minGridWidth
 			false). // focus
 		AddItem(paneFooter,
@@ -278,8 +264,7 @@ func main() {
 		return x, y, w, h
 	})
 
-	currentCat = nil
-	selectCategory()
+	reset()
 
 	go getCategories()
 
@@ -346,18 +331,18 @@ func renderCategories() {
 	}
 }
 
-func getRooms(id, name string) {
-	go updateStatus(fmt.Sprintf("正在获取「%s」的直播列表…", name), 0)
+func getRooms() {
+	go updateStatus(fmt.Sprintf("正在获取「%s」的直播列表…", currentSubCat.Name), 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var err error
-	rooms, err = dylive.GetRoomsByCategory(ctx, id)
+	rooms, err = dylive.GetRoomsByCategory(ctx, currentSubCat.Id)
 	if err != nil {
 		go updateStatus(err.Error(), 0)
 		return
 	}
-	currentConfig.DefaultSubCategory = name
-	go updateStatus(fmt.Sprintf("成功获取「%s」的直播列表", name), 1*time.Second)
+	currentConfig.DefaultSubCategory = currentSubCat.Name
+	go updateStatus(fmt.Sprintf("成功获取「%s」的直播列表", currentSubCat.Name), 1*time.Second)
 	app.QueueUpdateDraw(func() {
 		paneRooms.Select(0, 0)
 		renderRooms()
@@ -601,7 +586,7 @@ func selectCategory() {
 func renderSubcats(keepCurrentSelection bool) (firstHandler func()) {
 	idx := paneSubCats.GetCurrentItem()
 	paneSubCats.Clear()
-	for i, subcat := range currentCat.Categories {
+	for i := range currentCat.Categories {
 		var key rune
 		if i < 26 {
 			key = 'a' + rune(i)
@@ -610,7 +595,7 @@ func renderSubcats(keepCurrentSelection bool) (firstHandler func()) {
 		} else if i < 52+len(extraKeys) {
 			key = rune(extraKeys[i-52])
 		}
-		id := subcat.Id
+		subcat := currentCat.Categories[i]
 		count := selectedRooms.count(subcat.Name)
 		var name string
 		if count > 0 {
@@ -619,7 +604,8 @@ func renderSubcats(keepCurrentSelection bool) (firstHandler func()) {
 			name = subcat.Name
 		}
 		handler := func() {
-			go getRooms(id, name)
+			currentSubCat = &subcat
+			go getRooms()
 		}
 		if firstHandler == nil {
 			firstHandler = handler
@@ -685,6 +671,14 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case tcell.KeyCtrlA:
 		invertSelection()
+		return nil
+	case tcell.KeyCtrlR:
+		if event.Modifiers()&tcell.ModAlt != 0 {
+			reset()
+			go getCategories()
+			return nil
+		}
+		go getRooms()
 		return nil
 	case tcell.KeyCtrlS:
 		suspend(func() {
@@ -895,4 +889,39 @@ func suspend(f func()) {
 	} else {
 		app.Suspend(f)
 	}
+}
+
+func reset() {
+	if paneSubCats != nil {
+		grid.RemoveItem(paneSubCats)
+		paneSubCats = nil
+	}
+
+	if paneRooms != nil {
+		grid.RemoveItem(paneRooms)
+	}
+
+	paneSubCatsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
+	paneSubCatsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		y += h / 2
+		return x, y, w, h
+	})
+	paneRoomsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
+	paneRoomsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		y += h / 2
+		return x, y, w, h
+	})
+
+	categories = nil
+	renderCategories()
+	paneCats.Highlight("0")
+
+	currentCat = nil
+	selectCategory()
+
+	grid.AddItem(paneRoomsLoading,
+		1, 1, // row, column
+		1, 1, // rowSpan, colSpan
+		0, 0, // minGridHeight, minGridWidth
+		false) // focus
 }
