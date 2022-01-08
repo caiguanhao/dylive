@@ -279,18 +279,6 @@ func main() {
 	ioutil.WriteFile(*configFile, cfdata, 0644)
 }
 
-func getCurrentCategoryNumber() int {
-	hl := paneCats.GetHighlights()
-	if len(hl) < 1 {
-		return 1
-	}
-	index, _ := strconv.Atoi(hl[0])
-	if index < 1 {
-		return 1
-	}
-	return index
-}
-
 func getCategories() {
 	go updateStatus("正在获取分类…", 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -331,6 +319,95 @@ func renderCategories() {
 	}
 }
 
+func selectCategory() {
+	var pane tview.Primitive
+
+	if currentCat == nil {
+		pane = paneSubCatsLoading
+	} else {
+		currentConfig.DefaultCategory = currentCat.Name
+
+		if paneSubCatsLoading != nil {
+			grid.RemoveItem(paneSubCatsLoading)
+			paneSubCatsLoading = nil
+		}
+
+		if paneSubCats != nil {
+			grid.RemoveItem(paneSubCats)
+		}
+
+		paneSubCats = tview.NewList().
+			SetHighlightFullLine(true).
+			SetWrapAround(false).
+			SetShortcutColor(tcell.GetColor(color)).
+			ShowSecondaryText(false)
+
+		firstHandler := renderSubcats(false)
+		if firstHandler != nil {
+			firstHandler()
+		}
+
+		pane = paneSubCats
+	}
+
+	grid.AddItem(pane,
+		1, 0, // row, column
+		1, 1, // rowSpan, colSpan
+		0, 0, // minGridHeight, minGridWidth
+		false) // focus
+}
+
+func getCurrentCategoryNumber() int {
+	hl := paneCats.GetHighlights()
+	if len(hl) < 1 {
+		return 1
+	}
+	index, _ := strconv.Atoi(hl[0])
+	if index < 1 {
+		return 1
+	}
+	return index
+}
+
+func renderSubcats(keepCurrentSelection bool) (firstHandler func()) {
+	idx := paneSubCats.GetCurrentItem()
+	paneSubCats.Clear()
+	for i := range currentCat.Categories {
+		var key rune
+		if i < 26 {
+			key = 'a' + rune(i)
+		} else if i < 52 {
+			key = 'A' + rune(i-26)
+		} else if i < 52+len(extraKeys) {
+			key = rune(extraKeys[i-52])
+		}
+		subcat := currentCat.Categories[i]
+		count := selectedRooms.count(subcat.Name)
+		var name string
+		if count > 0 {
+			name = fmt.Sprintf("%s (%d)", subcat.Name, count)
+		} else {
+			name = subcat.Name
+		}
+		handler := func() {
+			currentSubCat = &subcat
+			go getRooms()
+		}
+		if firstHandler == nil {
+			firstHandler = handler
+		}
+		paneSubCats.AddItem(name, "", key, handler)
+		if name == currentConfig.DefaultSubCategory {
+			paneSubCats.SetCurrentItem(i)
+			firstHandler = handler
+		}
+	}
+	if keepCurrentSelection {
+		paneSubCats.SetCurrentItem(idx)
+	}
+	return
+}
+
 func getRooms() {
 	go updateStatus(fmt.Sprintf("正在获取「%s」的直播列表…", currentSubCat.Name), 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -342,13 +419,14 @@ func getRooms() {
 		return
 	}
 	currentConfig.DefaultSubCategory = currentSubCat.Name
-	go updateStatus(fmt.Sprintf("成功获取「%s」的直播列表", currentSubCat.Name), 1*time.Second)
+	go updateStatus("成功获取", 1*time.Second)
 	app.QueueUpdateDraw(func() {
 		paneRooms.Select(0, 0)
 		renderRooms()
 		app.SetFocus(paneRooms)
 	})
 }
+
 func renderRooms() {
 	paneRooms.Clear()
 	for i, room := range rooms {
@@ -541,83 +619,6 @@ func playerArgs(room dylive.Room, nth, total int) (out []string) {
 			continue
 		}
 		out = append(out, buf.String())
-	}
-	return
-}
-
-func selectCategory() {
-	var pane tview.Primitive
-
-	if currentCat == nil {
-		pane = paneSubCatsLoading
-	} else {
-		currentConfig.DefaultCategory = currentCat.Name
-
-		if paneSubCatsLoading != nil {
-			grid.RemoveItem(paneSubCatsLoading)
-			paneSubCatsLoading = nil
-		}
-
-		if paneSubCats != nil {
-			grid.RemoveItem(paneSubCats)
-		}
-
-		paneSubCats = tview.NewList().
-			SetHighlightFullLine(true).
-			SetWrapAround(false).
-			SetShortcutColor(tcell.GetColor(color)).
-			ShowSecondaryText(false)
-
-		firstHandler := renderSubcats(false)
-		if firstHandler != nil {
-			firstHandler()
-		}
-
-		pane = paneSubCats
-	}
-
-	grid.AddItem(pane,
-		1, 0, // row, column
-		1, 1, // rowSpan, colSpan
-		0, 0, // minGridHeight, minGridWidth
-		false) // focus
-}
-
-func renderSubcats(keepCurrentSelection bool) (firstHandler func()) {
-	idx := paneSubCats.GetCurrentItem()
-	paneSubCats.Clear()
-	for i := range currentCat.Categories {
-		var key rune
-		if i < 26 {
-			key = 'a' + rune(i)
-		} else if i < 52 {
-			key = 'A' + rune(i-26)
-		} else if i < 52+len(extraKeys) {
-			key = rune(extraKeys[i-52])
-		}
-		subcat := currentCat.Categories[i]
-		count := selectedRooms.count(subcat.Name)
-		var name string
-		if count > 0 {
-			name = fmt.Sprintf("%s (%d)", subcat.Name, count)
-		} else {
-			name = subcat.Name
-		}
-		handler := func() {
-			currentSubCat = &subcat
-			go getRooms()
-		}
-		if firstHandler == nil {
-			firstHandler = handler
-		}
-		paneSubCats.AddItem(name, "", key, handler)
-		if name == currentConfig.DefaultSubCategory {
-			paneSubCats.SetCurrentItem(i)
-			firstHandler = handler
-		}
-	}
-	if keepCurrentSelection {
-		paneSubCats.SetCurrentItem(idx)
 	}
 	return
 }
