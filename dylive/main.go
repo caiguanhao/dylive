@@ -40,6 +40,7 @@ var (
 
 	paneCatsShowKeys      bool
 	paneRoomsShowRoomName bool
+	paneRoomsX            int
 
 	categories []dylive.Category
 	rooms      []dylive.Room
@@ -123,123 +124,14 @@ func main() {
 	app.EnableMouse(!*noMouse)
 	app.SetInputCapture(onKeyPressed)
 
-	paneCats = tview.NewTextView().
-		SetTextAlign(tview.AlignCenter).
-		SetDynamicColors(true).
-		SetRegions(true).
-		SetWrap(false).
-		SetHighlightedFunc(func(added, removed, remaining []string) {
-			idx, _ := strconv.Atoi(added[0])
-			idx = idx - 1
-			if idx > -1 && idx < len(categories) {
-				currentCat = &categories[idx]
-				selectCategory()
-			}
-		})
-	paneCats.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		if showKeys := w > 75; paneCatsShowKeys != showKeys {
-			paneCatsShowKeys = showKeys
-			renderCategories()
-		}
-		return x, y, w, h
-	})
-
-	paneStatus = tview.NewTextView()
-	if !borderless {
-		paneStatus.SetBorderPadding(0, 0, 1, 1)
-	}
-	paneStatus.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-		if action == tview.MouseLeftClick && strings.HasPrefix(paneStatus.GetText(true), "http") {
-			lastEnterWithAlt = true
-			row, _ := paneRooms.GetSelection()
-			selectRoomByIndex(row)
-			lastEnterWithAlt = false
-		}
-		return action, event
-	})
-	go monitorStatus()
-
-	paneHelp = tview.NewTextView().
-		SetTextAlign(tview.AlignRight).
-		SetDynamicColors(true)
-	if !borderless {
-		paneHelp.SetBorderPadding(0, 0, 1, 1)
-	}
-	nextHelpMessage()
+	createCategories()
+	createStatus()
+	createHelp()
+	createRooms()
 
 	paneFooter := tview.NewFlex().
 		AddItem(paneStatus, 0, 1, false).
 		AddItem(paneHelp, 0, 1, false)
-
-	paneRooms = tview.NewTable().
-		SetSelectable(true, false).
-		SetBorders(false).
-		SetSelectionChangedFunc(func(row, column int) {
-			if row < 0 || row >= len(rooms) {
-				return
-			}
-			go updateStatus(rooms[row].WebUrl, 0)
-		}).
-		SetSelectedFunc(func(row, column int) {
-			if len(selectedRooms) > 0 {
-				selectRooms()
-			} else {
-				selectRoomByIndex(row)
-			}
-		})
-	var paneRoomsX int
-	paneRooms.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		if showRoomName := w > 60; paneRoomsShowRoomName != showRoomName {
-			paneRoomsShowRoomName = showRoomName
-			renderRooms()
-		}
-		if borderless {
-			x += 1
-			w -= 1
-		}
-		paneRoomsX = x
-		return x, y, w, h
-	})
-	paneRooms.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-		when := event.When()
-		if when.Sub(lastMouseClick) > 100*time.Millisecond {
-			switch action {
-			case tview.MouseMiddleClick:
-				go app.QueueUpdateDraw(func() {
-					lastEnterWithAlt = true
-					row, _ := paneRooms.GetSelection()
-					selectRoomByIndex(row)
-					lastMouseClick = when
-					lastEnterWithAlt = false
-				})
-				return tview.MouseLeftClick, event
-			case tview.MouseLeftClick:
-				x, _ := event.Position()
-				if x-paneRoomsX < 4 { // click on number
-					go app.QueueUpdateDraw(func() {
-						row, _ := paneRooms.GetSelection()
-						if row < 0 || row >= len(rooms) {
-							return
-						}
-						selectedRooms.toggle(rooms[row])
-						renderRooms()
-						renderSubcats(true)
-						lastMouseClick = when
-					})
-				}
-			case tview.MouseLeftDoubleClick:
-				if len(selectedRooms) > 0 {
-					selectRooms()
-				} else {
-					row, _ := paneRooms.GetSelection()
-					selectRoomByIndex(row)
-				}
-				lastMouseClick = when
-				return action, nil
-			}
-		}
-		return action, event
-	})
 
 	grid = tview.NewGrid().
 		SetBorders(!borderless).
@@ -277,6 +169,64 @@ func main() {
 
 	cfdata, _ = json.MarshalIndent(currentConfig, "", "  ")
 	ioutil.WriteFile(*configFile, cfdata, 0644)
+}
+
+func reset() {
+	if paneSubCats != nil {
+		grid.RemoveItem(paneSubCats)
+		paneSubCats = nil
+	}
+
+	if paneRooms != nil {
+		grid.RemoveItem(paneRooms)
+	}
+
+	paneSubCatsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
+	paneSubCatsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		y += h / 2
+		return x, y, w, h
+	})
+	paneRoomsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
+	paneRoomsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		y += h / 2
+		return x, y, w, h
+	})
+
+	categories = nil
+	renderCategories()
+	paneCats.Highlight("0")
+
+	currentCat = nil
+	selectCategory()
+
+	grid.AddItem(paneRoomsLoading,
+		1, 1, // row, column
+		1, 1, // rowSpan, colSpan
+		0, 0, // minGridHeight, minGridWidth
+		false) // focus
+}
+
+func createCategories() {
+	paneCats = tview.NewTextView().
+		SetTextAlign(tview.AlignCenter).
+		SetDynamicColors(true).
+		SetRegions(true).
+		SetWrap(false).
+		SetHighlightedFunc(func(added, removed, remaining []string) {
+			idx, _ := strconv.Atoi(added[0])
+			idx = idx - 1
+			if idx > -1 && idx < len(categories) {
+				currentCat = &categories[idx]
+				selectCategory()
+			}
+		})
+	paneCats.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		if showKeys := w > 75; paneCatsShowKeys != showKeys {
+			paneCatsShowKeys = showKeys
+			renderCategories()
+		}
+		return x, y, w, h
+	})
 }
 
 func getCategories() {
@@ -406,6 +356,38 @@ func renderSubcats(keepCurrentSelection bool) (firstHandler func()) {
 		paneSubCats.SetCurrentItem(idx)
 	}
 	return
+}
+
+func createRooms() {
+	paneRooms = tview.NewTable().
+		SetSelectable(true, false).
+		SetBorders(false).
+		SetSelectionChangedFunc(func(row, column int) {
+			if row < 0 || row >= len(rooms) {
+				return
+			}
+			go updateStatus(rooms[row].WebUrl, 0)
+		}).
+		SetSelectedFunc(func(row, column int) {
+			if len(selectedRooms) > 0 {
+				selectRooms()
+			} else {
+				selectRoomByIndex(row)
+			}
+		})
+	paneRooms.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		if showRoomName := w > 60; paneRoomsShowRoomName != showRoomName {
+			paneRoomsShowRoomName = showRoomName
+			renderRooms()
+		}
+		if borderless {
+			x += 1
+			w -= 1
+		}
+		paneRoomsX = x
+		return x, y, w, h
+	})
+	paneRooms.SetMouseCapture(onRoomsClicked)
 }
 
 func getRooms() {
@@ -623,6 +605,48 @@ func playerArgs(room dylive.Room, nth, total int) (out []string) {
 	return
 }
 
+func onRoomsClicked(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	when := event.When()
+	if when.Sub(lastMouseClick) < 100*time.Millisecond {
+		return action, event
+	}
+	switch action {
+	case tview.MouseMiddleClick:
+		go app.QueueUpdateDraw(func() {
+			lastEnterWithAlt = true
+			row, _ := paneRooms.GetSelection()
+			selectRoomByIndex(row)
+			lastMouseClick = when
+			lastEnterWithAlt = false
+		})
+		return tview.MouseLeftClick, event
+	case tview.MouseLeftClick:
+		x, _ := event.Position()
+		if x-paneRoomsX < 4 { // click on number
+			go app.QueueUpdateDraw(func() {
+				row, _ := paneRooms.GetSelection()
+				if row < 0 || row >= len(rooms) {
+					return
+				}
+				selectedRooms.toggle(rooms[row])
+				renderRooms()
+				renderSubcats(true)
+				lastMouseClick = when
+			})
+		}
+	case tview.MouseLeftDoubleClick:
+		if len(selectedRooms) > 0 {
+			selectRooms()
+		} else {
+			row, _ := paneRooms.GetSelection()
+			selectRoomByIndex(row)
+		}
+		lastMouseClick = when
+		return action, nil
+	}
+	return action, event
+}
+
 func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 	if pages.HasPage("modal") {
 		return event
@@ -771,6 +795,16 @@ func invertSelection() {
 	renderSubcats(true)
 }
 
+func createHelp() {
+	paneHelp = tview.NewTextView().
+		SetTextAlign(tview.AlignRight).
+		SetDynamicColors(true)
+	if !borderless {
+		paneHelp.SetBorderPadding(0, 0, 1, 1)
+	}
+	nextHelpMessage()
+}
+
 func nextHelpMessage() {
 	paneHelp.Clear()
 	if currentHelp > -1 {
@@ -783,6 +817,23 @@ func nextHelpMessage() {
 	if currentHelp >= len(helps) {
 		currentHelp = -1
 	}
+}
+
+func createStatus() {
+	paneStatus = tview.NewTextView()
+	if !borderless {
+		paneStatus.SetBorderPadding(0, 0, 1, 1)
+	}
+	paneStatus.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action == tview.MouseLeftClick && strings.HasPrefix(paneStatus.GetText(true), "http") {
+			lastEnterWithAlt = true
+			row, _ := paneRooms.GetSelection()
+			selectRoomByIndex(row)
+			lastEnterWithAlt = false
+		}
+		return action, event
+	})
+	go monitorStatus()
 }
 
 type status struct {
@@ -890,39 +941,4 @@ func suspend(f func()) {
 	} else {
 		app.Suspend(f)
 	}
-}
-
-func reset() {
-	if paneSubCats != nil {
-		grid.RemoveItem(paneSubCats)
-		paneSubCats = nil
-	}
-
-	if paneRooms != nil {
-		grid.RemoveItem(paneRooms)
-	}
-
-	paneSubCatsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
-	paneSubCatsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		y += h / 2
-		return x, y, w, h
-	})
-	paneRoomsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
-	paneRoomsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		y += h / 2
-		return x, y, w, h
-	})
-
-	categories = nil
-	renderCategories()
-	paneCats.Highlight("0")
-
-	currentCat = nil
-	selectCategory()
-
-	grid.AddItem(paneRoomsLoading,
-		1, 1, // row, column
-		1, 1, // rowSpan, colSpan
-		0, 0, // minGridHeight, minGridWidth
-		false) // focus
 }
