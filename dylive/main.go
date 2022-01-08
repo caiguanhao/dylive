@@ -391,6 +391,7 @@ func createRooms() {
 }
 
 func getRooms() {
+	paneRooms.Clear()
 	go updateStatus(fmt.Sprintf("正在获取「%s」的直播列表…", currentSubCat.Name), 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
