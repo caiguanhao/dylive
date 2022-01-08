@@ -438,6 +438,8 @@ func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
 		var cmd *exec.Cmd
 		if isWindows {
 			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", room.WebUrl)
+		} else if commandExists("xdg-open") {
+			cmd = exec.Command("xdg-open", room.WebUrl)
 		} else {
 			cmd = exec.Command("open", room.WebUrl)
 		}
