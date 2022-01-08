@@ -45,6 +45,7 @@ var (
 	selectedRooms selections
 
 	lastEnterWithAlt bool
+	lastMouseClick   time.Time
 
 	currentCat    *dylive.Category
 	currentHelp   int = -1
@@ -111,6 +112,8 @@ func main() {
 	cfdata, _ := ioutil.ReadFile(*configFile)
 	json.Unmarshal(cfdata, &currentConfig)
 
+	tview.DoubleClickInterval = 300 * time.Millisecond
+
 	app = tview.NewApplication()
 
 	app.SetInputCapture(onKeyPressed)
@@ -170,6 +173,23 @@ func main() {
 				selectRoomByIndex(row)
 			}
 		})
+	paneRooms.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		when := event.When()
+		if when.Sub(lastMouseClick) > 100*time.Millisecond {
+			switch action {
+			case tview.MouseMiddleClick:
+				lastEnterWithAlt = true
+				fallthrough
+			case tview.MouseLeftDoubleClick:
+				row, _ := paneRooms.GetSelection()
+				selectRoomByIndex(row)
+				lastMouseClick = when
+				lastEnterWithAlt = false
+				return action, nil
+			}
+		}
+		return action, event
+	})
 	paneRooms.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
 		if showRoomName := w > 60; paneRoomsShowRoomName != showRoomName {
 			paneRoomsShowRoomName = showRoomName
