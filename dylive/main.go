@@ -89,6 +89,7 @@ func main() {
 		defaultConfigFile = filepath.Join(home, defaultConfigFile)
 	}
 	configFile := flag.String("c", defaultConfigFile, "config file location")
+	noMouse := flag.Bool("no-mouse", false, "disable mouse")
 	flag.Usage = func() {
 		o := flag.CommandLine.Output()
 		fmt.Fprintln(o, "Usage:", filepath.Base(os.Args[0]), "[options] -- [player arguments]")
@@ -117,7 +118,7 @@ func main() {
 	tview.DoubleClickInterval = 300 * time.Millisecond
 
 	app = tview.NewApplication()
-
+	app.EnableMouse(!*noMouse)
 	app.SetInputCapture(onKeyPressed)
 
 	paneCats = tview.NewTextView().
@@ -145,6 +146,15 @@ func main() {
 	if !borderless {
 		paneStatus.SetBorderPadding(0, 0, 1, 1)
 	}
+	paneStatus.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action == tview.MouseLeftClick && strings.HasPrefix(paneStatus.GetText(true), "http") {
+			lastEnterWithAlt = true
+			row, _ := paneRooms.GetSelection()
+			selectRoomByIndex(row)
+			lastEnterWithAlt = false
+		}
+		return action, event
+	})
 	go monitorStatus()
 
 	paneHelp = tview.NewTextView().
@@ -276,7 +286,7 @@ func main() {
 	pages = tview.NewPages()
 	pages.AddPage("grid", grid, true, true)
 
-	if err := app.SetRoot(pages, true).EnableMouse(true).Run(); err != nil {
+	if err := app.SetRoot(pages, true).Run(); err != nil {
 		panic(err)
 	}
 
