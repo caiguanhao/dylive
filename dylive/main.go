@@ -181,11 +181,18 @@ func reset() {
 		grid.RemoveItem(paneRooms)
 	}
 
+	if paneSubCatsLoading != nil {
+		grid.RemoveItem(paneSubCatsLoading)
+	}
 	paneSubCatsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
 	paneSubCatsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
 		y += h / 2
 		return x, y, w, h
 	})
+
+	if paneRoomsLoading != nil {
+		grid.RemoveItem(paneRoomsLoading)
+	}
 	paneRoomsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
 	paneRoomsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
 		y += h / 2
@@ -197,6 +204,7 @@ func reset() {
 	paneCats.Highlight("0")
 
 	currentCat = nil
+	currentSubCat = nil
 	selectCategory()
 
 	grid.AddItem(paneRoomsLoading,
@@ -236,7 +244,7 @@ func getCategories() {
 	var err error
 	categories, err = dylive.GetCategories(ctx)
 	if err != nil {
-		go updateStatus(err.Error(), 0)
+		go showError(err)
 		return
 	}
 	go updateStatus("成功获取分类", 0)
@@ -391,14 +399,19 @@ func createRooms() {
 }
 
 func getRooms() {
-	paneRooms.Clear()
+	if currentSubCat == nil {
+		return
+	}
+	if paneRooms != nil {
+		paneRooms.Clear()
+	}
 	go updateStatus(fmt.Sprintf("正在获取「%s」的直播列表…", currentSubCat.Name), 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var err error
 	rooms, err = dylive.GetRoomsByCategory(ctx, currentSubCat.Id)
 	if err != nil {
-		go updateStatus(err.Error(), 0)
+		go showError(err)
 		return
 	}
 	currentConfig.DefaultSubCategory = currentSubCat.Name
@@ -441,18 +454,7 @@ func renderRooms() {
 
 func selectRooms() {
 	if count := len(selectedRooms); count > 9 {
-		modal := tview.NewModal()
-		modal.SetBackgroundColor(tcell.ColorBlue)
-		modal.SetButtonBackgroundColor(tcell.ColorBlue)
-		if borderless {
-			// hack
-			field := reflect.ValueOf(modal).Elem().FieldByName("frame")
-			iFrame := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface()
-			if frame, ok := iFrame.(*tview.Frame); ok {
-				frame.SetBorder(false)
-				frame.SetBorderPadding(2, 0, 0, 0)
-			}
-		}
+		modal := newModal()
 		modal.SetText(fmt.Sprintf("确定要打开 %d 个直播吗？", count)).
 			AddButtons([]string{
 				"确定",
@@ -699,9 +701,8 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		invertSelection()
 		return nil
 	case tcell.KeyCtrlR:
-		if event.Modifiers()&tcell.ModAlt != 0 {
-			reset()
-			go getCategories()
+		if event.Modifiers()&tcell.ModAlt != 0 || currentSubCat == nil {
+			forceReload()
 			return nil
 		}
 		go getRooms()
@@ -758,6 +759,46 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 	return event
+}
+
+func forceReload() {
+	reset()
+	go getCategories()
+}
+
+func showError(err error) {
+	go updateStatus("发生错误", 0)
+	app.QueueUpdateDraw(func() {
+		modal := newModal()
+		modal.SetText("发生错误：" + err.Error()).
+			AddButtons([]string{
+				"重新加载",
+			}).SetFocus(0).SetDoneFunc(func(index int, label string) {
+			pages.RemovePage("modal")
+			go app.QueueUpdateDraw(func() {
+				time.Sleep(500 * time.Millisecond)
+				forceReload()
+			})
+		})
+		pages.AddPage("modal", modal, false, false)
+		pages.ShowPage("modal")
+	})
+}
+
+func newModal() *tview.Modal {
+	modal := tview.NewModal()
+	modal.SetBackgroundColor(tcell.ColorBlue)
+	modal.SetButtonBackgroundColor(tcell.ColorBlue)
+	if borderless {
+		// hack
+		field := reflect.ValueOf(modal).Elem().FieldByName("frame")
+		iFrame := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface()
+		if frame, ok := iFrame.(*tview.Frame); ok {
+			frame.SetBorder(false)
+			frame.SetBorderPadding(2, 0, 0, 0)
+		}
+	}
+	return modal
 }
 
 func editInEditor(f func(*os.File)) {
