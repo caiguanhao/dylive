@@ -410,7 +410,12 @@ func roomsCommands() (cmds []string) {
 
 func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
 	if lastEnterWithAlt == true {
-		cmd := exec.Command("open", room.WebUrl)
+		var cmd *exec.Cmd
+		if isWindows {
+			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", room.WebUrl)
+		} else {
+			cmd = exec.Command("open", room.WebUrl)
+		}
 		if noRun == false {
 			cmd.Start()
 		}
