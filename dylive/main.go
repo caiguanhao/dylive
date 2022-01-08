@@ -178,13 +178,18 @@ func main() {
 		if when.Sub(lastMouseClick) > 100*time.Millisecond {
 			switch action {
 			case tview.MouseMiddleClick:
-				lastEnterWithAlt = true
-				fallthrough
+				go app.QueueUpdateDraw(func() {
+					lastEnterWithAlt = true
+					row, _ := paneRooms.GetSelection()
+					selectRoomByIndex(row)
+					lastMouseClick = when
+					lastEnterWithAlt = false
+				})
+				return tview.MouseLeftClick, event
 			case tview.MouseLeftDoubleClick:
 				row, _ := paneRooms.GetSelection()
 				selectRoomByIndex(row)
 				lastMouseClick = when
-				lastEnterWithAlt = false
 				return action, nil
 			}
 		}
