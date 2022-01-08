@@ -10,7 +10,6 @@ import (
 	"math"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -89,7 +88,7 @@ func main() {
 	configFile := flag.String("c", defaultConfigFile, "config file location")
 	flag.Usage = func() {
 		o := flag.CommandLine.Output()
-		fmt.Fprintln(o, "Usage:", path.Base(os.Args[0]), "[options] -- [player arguments]")
+		fmt.Fprintln(o, "Usage:", filepath.Base(os.Args[0]), "[options] -- [player arguments]")
 		flag.PrintDefaults()
 		fmt.Fprintln(o)
 		fmt.Fprintln(o, "EnvVars:")
@@ -418,8 +417,8 @@ func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
 		}
 	} else {
 		cmdName = player
-		base := path.Base(player)
-		if base == "mpv" {
+		base := filepath.Base(player)
+		if base == "mpv" || base == "mpv.exe" {
 			cmdType = "mpv"
 		} else if base == "iina-cli" {
 			cmdType = "iina"
