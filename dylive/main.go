@@ -64,11 +64,11 @@ var (
 		{"(Shift)+Tab", "切换主分类"},
 		{"Alt+Up/Down/PgUp/PgDn", "切换子分类"},
 		{"Space", "选择多个直播"},
-		{"Alt+Space", "当前页反向选择"},
+		{"Ctrl+A", "当前页反向选择"},
 		{"Backspace", "取消所有选择"},
 		{"Enter", "播放器中打开"},
 		{"Alt-Enter", "浏览器中打开"},
-		{"Ctrl-(Alt)-E", "编辑器中查看信息"},
+		{"Ctrl+(Alt)+E", "编辑器中查看信息"},
 		{"Ctrl-S", "编辑器中查看命令"},
 	}
 )
@@ -638,11 +638,7 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 	}
 	if r == ' ' {
 		if event.Modifiers()&tcell.ModAlt != 0 {
-			for _, room := range rooms {
-				selectedRooms.toggle(room)
-			}
-			renderRooms()
-			renderSubcats(true)
+			invertSelection()
 			return nil
 		}
 		row, _ := paneRooms.GetSelection()
@@ -676,6 +672,9 @@ func onKeyPressed(event *tcell.EventKey) *tcell.EventKey {
 		selectedRooms = nil
 		renderRooms()
 		renderSubcats(true)
+		return nil
+	case tcell.KeyCtrlA:
+		invertSelection()
 		return nil
 	case tcell.KeyCtrlS:
 		suspend(func() {
@@ -757,6 +756,14 @@ func editInEditor(f func(*os.File)) {
 		cmd.Stdout = os.Stdout
 	}
 	cmd.Run()
+}
+
+func invertSelection() {
+	for _, room := range rooms {
+		selectedRooms.toggle(room)
+	}
+	renderRooms()
+	renderSubcats(true)
 }
 
 func nextHelpMessage() {
