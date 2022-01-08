@@ -173,6 +173,19 @@ func main() {
 				selectRoomByIndex(row)
 			}
 		})
+	var paneRoomsX int
+	paneRooms.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		if showRoomName := w > 60; paneRoomsShowRoomName != showRoomName {
+			paneRoomsShowRoomName = showRoomName
+			renderRooms()
+		}
+		if borderless {
+			x += 1
+			w -= 1
+		}
+		paneRoomsX = x
+		return x, y, w, h
+	})
 	paneRooms.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		when := event.When()
 		if when.Sub(lastMouseClick) > 100*time.Millisecond {
@@ -186,25 +199,32 @@ func main() {
 					lastEnterWithAlt = false
 				})
 				return tview.MouseLeftClick, event
+			case tview.MouseLeftClick:
+				x, _ := event.Position()
+				if x-paneRoomsX < 4 { // click on number
+					go app.QueueUpdateDraw(func() {
+						row, _ := paneRooms.GetSelection()
+						if row < 0 || row >= len(rooms) {
+							return
+						}
+						selectedRooms.toggle(rooms[row])
+						renderRooms()
+						renderSubcats(true)
+						lastMouseClick = when
+					})
+				}
 			case tview.MouseLeftDoubleClick:
-				row, _ := paneRooms.GetSelection()
-				selectRoomByIndex(row)
+				if len(selectedRooms) > 0 {
+					selectRooms()
+				} else {
+					row, _ := paneRooms.GetSelection()
+					selectRoomByIndex(row)
+				}
 				lastMouseClick = when
 				return action, nil
 			}
 		}
 		return action, event
-	})
-	paneRooms.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		if showRoomName := w > 60; paneRoomsShowRoomName != showRoomName {
-			paneRoomsShowRoomName = showRoomName
-			renderRooms()
-		}
-		if borderless {
-			x += 1
-			w -= 1
-		}
-		return x, y, w, h
 	})
 
 	paneSubCatsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
