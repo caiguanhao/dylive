@@ -64,6 +64,9 @@ List of variables that can be used in template:
 ```
 # assume you have mpv command in your PATH
 dylive -- --stream-record={{.User.Name}}.mp4
+
+# for Windows, you may need to add quotes
+dylive -- --no-border "--stream-record={{.User.Name}}-{{.Now}}.mp4"
 ```
 
 Press `Ctrl-S` to view list of commands.
