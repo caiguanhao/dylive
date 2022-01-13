@@ -55,10 +55,10 @@ var (
 	currentHelp   int = -1
 	currentConfig config
 
-	color         string
-	defeaultColor = "lightgreen"
-	isWindows     = runtime.GOOS == "windows"
-	borderless    = isWindows
+	color      = "lightgreen"
+	isWindows  = runtime.GOOS == "windows"
+	borderless = isWindows
+	timeFormat = "2006-01-02-15-04-05"
 
 	statusChan = make(chan status)
 
@@ -101,8 +101,10 @@ func main() {
 		fmt.Fprintln(o, "EnvVars:")
 		fmt.Fprintln(o, "  PLAYER - video player, defaults to mpv and iina-cli")
 		fmt.Fprintln(o, "  EDITOR - text editor, defaults to vim or vi")
-		fmt.Fprintln(o, "  COLOR  - color for keys, defaults to", defeaultColor)
+		fmt.Fprintln(o, "  COLOR  - color for keys, defaults to", color)
 		fmt.Fprintln(o, "           https://github.com/gdamore/tcell/blob/v2.4.0/color.go#L845")
+		fmt.Fprintln(o, "  TIME_FORMAT - time format, defaults to", timeFormat)
+		fmt.Fprintln(o, "                https://pkg.go.dev/time#pkg-constants")
 		fmt.Fprintln(o)
 		fmt.Fprintln(o, "Keys:")
 		for _, h := range helps {
@@ -111,8 +113,11 @@ func main() {
 	}
 	flag.Parse()
 
-	if color = os.Getenv("COLOR"); color == "" {
-		color = defeaultColor
+	if c := os.Getenv("COLOR"); c != "" {
+		color = c
+	}
+	if tf := os.Getenv("TIME_FORMAT"); tf != "" {
+		timeFormat = tf
 	}
 
 	cfdata, _ := ioutil.ReadFile(*configFile)
@@ -591,7 +596,8 @@ func playerArgs(room dylive.Room, nth, total int) (out []string) {
 		Index int
 		Nth   int
 		Total int
-	}{room, nth, nth + 1, total}
+		Now   string
+	}{room, nth, nth + 1, total, time.Now().Format(timeFormat)}
 	for _, arg := range flag.Args() {
 		tpl, err := template.New("").Parse(arg)
 		if err != nil {

@@ -59,6 +59,7 @@ List of variables that can be used in template:
 - Room info (which can be obtained with `Ctrl-E`)
 - Index number of room (`{{.Index}}` or `{{.Nth}}`)
 - Number of rooms (`{{.Total}}`)
+- Current date/time (`{{.Now}}`), its format can be changed with `TIME_FORMAT` environment variable.
 
 ```
 # assume you have mpv command in your PATH
