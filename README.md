@@ -2,8 +2,8 @@
 
 Utility to watch Douyin live streams. 观看抖音直播工具
 
-- Use keyboard to navigate different categories.
-- Select multiple live stream rooms and open at once.
+- Use keyboard or mouse to navigate different categories.
+- Select multiple live stream rooms and open them at once.
 
 To install:
 
@@ -12,6 +12,8 @@ You must have installed [Go](https://go.dev/dl/) first.
 ```
 go install -v github.com/caiguanhao/dylive/dylive@latest
 ```
+
+Also install [mpv](https://mpv.io/installation/) to play live stream.
 
 Works on macOS, Linux or Windows.
 
