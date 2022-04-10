@@ -54,6 +54,7 @@ var (
 	currentSubCat *dylive.Category
 	currentHelp   int = -1
 	currentConfig config
+	preferQuality string
 
 	color      = "lightgreen"
 	isWindows  = runtime.GOOS == "windows"
@@ -93,6 +94,7 @@ func main() {
 	}
 	configFile := flag.String("c", defaultConfigFile, "config file location")
 	noMouse := flag.Bool("no-mouse", false, "disable mouse")
+	flag.StringVar(&preferQuality, "q", "hd", "video quality (uhd, hd, ld, sd)")
 	flag.Usage = func() {
 		o := flag.CommandLine.Output()
 		fmt.Fprintln(o, "Usage:", filepath.Base(os.Args[0]), "[options] -- [player arguments]")
@@ -556,16 +558,32 @@ func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
 		}
 	}
 
+	url := room.StreamUrl
+	const hdSuffix = "_hd.flv"
+	var suffix string
+	switch preferQuality {
+	case "uhd":
+		suffix = "_uhd.flv"
+	case "ld":
+		suffix = "_ld.flv"
+	case "sd":
+		suffix = "_sd.flv"
+	}
+	if suffix != "" && strings.HasSuffix(url, hdSuffix) {
+		newUrl := room.StreamUrl[0:len(url)-len(hdSuffix)] + suffix
+		url = newUrl
+	}
+
 	switch cmdType {
 	case "mpv":
-		args := []string{"--title=" + room.User.Name, "--force-window=immediate", room.StreamUrl}
+		args := []string{"--title=" + room.User.Name, "--force-window=immediate", url}
 		if geometry := mpvGeometry(nth, total); geometry != "" {
 			args = append(args, "--geometry="+geometry)
 		}
 		args = append(args, playerArgs(room, nth, total)...)
 		cmd = exec.Command(cmdName, args...)
 	case "iina":
-		args := []string{room.StreamUrl, "--", "--force-media-title=" + room.User.Name}
+		args := []string{url, "--", "--force-media-title=" + room.User.Name}
 		if geometry := mpvGeometry(nth, total); geometry != "" {
 			args = append(args, "--geometry="+geometry)
 			time.Sleep(500 * time.Millisecond) // iina bug? open too fast will break
@@ -574,10 +592,10 @@ func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
 		cmd = exec.Command(cmdName, args...)
 		cmd.Stdin = os.Stdin
 	case "open":
-		cmd = exec.Command("open", "-na", cmdName, room.StreamUrl)
+		cmd = exec.Command("open", "-na", cmdName, url)
 	default:
 		if cmdName != "" {
-			args := []string{room.StreamUrl}
+			args := []string{url}
 			args = append(args, playerArgs(room, nth, total)...)
 			cmd = exec.Command(cmdName, args...)
 		}
