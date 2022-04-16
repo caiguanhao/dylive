@@ -5,11 +5,16 @@ Utility to watch Douyin live streams. 观看抖音直播工具
 - Use keyboard or mouse to navigate different categories.
 - Select multiple live stream rooms and open them at once.
 
+---
+
+NOTE: Due to new [regulation](https://www.reuters.com/world/china/chinas-broadcasting-regulator-ban-livestreaming-games-without-approval-2022-04-15/),
+Douyin.com has removed many online game live broadcasting categories on April 16, 2022.
+
+---
+
 To install:
 
 You must have installed [Go](https://go.dev/dl/) first.
-
-NOTE: Douyin has removed many online game live broadcasting categories on April 16, 2022.
 
 ```
 go install -v github.com/caiguanhao/dylive/dylive@latest
