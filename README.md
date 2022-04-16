@@ -9,6 +9,8 @@ To install:
 
 You must have installed [Go](https://go.dev/dl/) first.
 
+NOTE: Douyin has removed many online game live broadcasting categories on April 16, 2022.
+
 ```
 go install -v github.com/caiguanhao/dylive/dylive@latest
 ```
