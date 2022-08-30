@@ -21,7 +21,7 @@ type (
 	}
 
 	dyliveCategories struct {
-		RouteInitialProps struct {
+		App struct {
 			LayoutData struct {
 				CategoryTab struct {
 					CategoryData []struct {
@@ -33,6 +33,8 @@ type (
 					} `json:"categoryData"`
 				} `json:"categoryTab"`
 			} `json:"layoutData"`
+		} `json:"app"`
+		Four struct {
 			PartitionData struct {
 				Partition struct {
 					IDStr string `json:"id_str"`
@@ -45,7 +47,7 @@ type (
 					Title string `json:"title"`
 				} `json:"sub_partition"`
 			} `json:"partitionData"`
-		} `json:"routeInitialProps"`
+		} `json:"4"`
 	}
 )
 
@@ -90,7 +92,7 @@ func getCategories(ctx context.Context, id string, categories, subCategories *[]
 		return err
 	}
 	if categories != nil {
-		for _, cat := range cats.RouteInitialProps.LayoutData.CategoryTab.CategoryData {
+		for _, cat := range cats.App.LayoutData.CategoryTab.CategoryData {
 			*categories = append(*categories, Category{
 				Id:   fmt.Sprintf("%d_%s", cat.Partition.Type, cat.Partition.IDStr),
 				Name: cat.Partition.Title,
@@ -98,8 +100,8 @@ func getCategories(ctx context.Context, id string, categories, subCategories *[]
 		}
 	}
 	if subCategories != nil {
-		p := cats.RouteInitialProps.PartitionData.Partition
-		for _, cat := range cats.RouteInitialProps.PartitionData.SubPartition {
+		p := cats.Four.PartitionData.Partition
+		for _, cat := range cats.Four.PartitionData.SubPartition {
 			*subCategories = append(*subCategories, Category{
 				Id:   fmt.Sprintf("%d_%s_%d_%s", p.Type, p.IDStr, cat.Type, cat.IDStr),
 				Name: cat.Title,
@@ -127,7 +129,7 @@ type (
 	}
 
 	dyliveCategory struct {
-		RouteInitialProps struct {
+		Four struct {
 			RoomsData struct {
 				Data []struct {
 					Room struct {
@@ -158,7 +160,7 @@ type (
 					Title string `json:"title"`
 				} `json:"select_partition"`
 			} `json:"partitionData"`
-		} `json:"routeInitialProps"`
+		} `json:"4"`
 	}
 )
 
@@ -174,9 +176,9 @@ func GetRoomsByCategory(ctx context.Context, categoryId string) ([]Room, error) 
 		return nil, err
 	}
 	var rooms []Room
-	for _, room := range cat.RouteInitialProps.RoomsData.Data {
-		p := cat.RouteInitialProps.PartitionData.Partition
-		c := cat.RouteInitialProps.PartitionData.SelectPartition
+	for _, room := range cat.Four.RoomsData.Data {
+		p := cat.Four.PartitionData.Partition
+		c := cat.Four.PartitionData.SelectPartition
 		rooms = append(rooms, Room{
 			Name:              room.Room.Title,
 			CoverUrl:          room.Cover,

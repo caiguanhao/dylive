@@ -34,7 +34,7 @@ func TestGetCategories(t *testing.T) {
 func TestGetRoomsByCategory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	rooms, err := GetRoomsByCategory(ctx, "1_576_1_616")
+	rooms, err := GetRoomsByCategory(ctx, "1_4606_1_616")
 	if err != nil {
 		t.Error(err)
 	}
