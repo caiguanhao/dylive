@@ -47,7 +47,7 @@ type (
 					Title string `json:"title"`
 				} `json:"sub_partition"`
 			} `json:"partitionData"`
-		} `json:"4"`
+		} `json:"874cbd3ca82b27af9f285883fd26e52f"`
 	}
 )
 
@@ -160,7 +160,7 @@ type (
 					Title string `json:"title"`
 				} `json:"select_partition"`
 			} `json:"partitionData"`
-		} `json:"4"`
+		} `json:"874cbd3ca82b27af9f285883fd26e52f"`
 	}
 )
 
