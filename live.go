@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -116,11 +117,13 @@ type (
 		Name              string
 		CoverUrl          string
 		WebUrl            string
-		StreamUrl         string
 		CurrentUsersCount string
 		TotalUsersCount   string
 		Category          Category
 		User              User
+		StreamUrl         string
+		FlvStreamUrls     map[string]string
+		HlsStreamUrls     map[string]string
 	}
 
 	User struct {
@@ -141,6 +144,13 @@ type (
 						Owner struct {
 							Nickname string `json:"nickname"`
 						} `json:"owner"`
+						StreamUrl struct {
+							FlvPullUrl    map[string]string `json:"flv_pull_url"`
+							HlsPullUrlMap map[string]string `json:"hls_pull_url_map"`
+						} `json:"stream_url"`
+						RoomViewStats struct {
+							DisplayValue int `json:"display_value"`
+						} `json:"room_view_stats"`
 					} `json:"room"`
 					WebRid    string `json:"web_rid"`
 					StreamSrc string `json:"streamSrc"`
@@ -179,12 +189,20 @@ func GetRoomsByCategory(ctx context.Context, categoryId string) ([]Room, error) 
 	for _, room := range cat.Four.RoomsData.Data {
 		p := cat.Four.PartitionData.Partition
 		c := cat.Four.PartitionData.SelectPartition
+		var count string
+		if room.Room.RoomViewStats.DisplayValue > 0 {
+			count = strconv.Itoa(room.Room.RoomViewStats.DisplayValue)
+		} else {
+			count = room.Room.Stats.UserCountStr
+		}
 		rooms = append(rooms, Room{
 			Name:              room.Room.Title,
 			CoverUrl:          room.Cover,
 			WebUrl:            "https://live.douyin.com/" + room.WebRid,
 			StreamUrl:         room.StreamSrc,
-			CurrentUsersCount: room.Room.Stats.UserCountStr,
+			FlvStreamUrls:     room.Room.StreamUrl.FlvPullUrl,
+			HlsStreamUrls:     room.Room.StreamUrl.HlsPullUrlMap,
+			CurrentUsersCount: count,
 			TotalUsersCount:   room.Room.Stats.TotalUserStr,
 			Category: Category{
 				Id:   fmt.Sprintf("%d_%s", p.Type, p.IDStr),
