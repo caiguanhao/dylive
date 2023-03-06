@@ -559,19 +559,29 @@ func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
 	}
 
 	url := room.StreamUrl
-	const hdSuffix = "_hd.flv"
-	var suffix string
+
 	switch preferQuality {
 	case "uhd":
-		suffix = "_uhd.flv"
+		for key, value := range room.FlvStreamUrls {
+			if strings.Contains(key, "FULL_HD") || strings.Contains(value, "_uhd") {
+				url = value
+				break
+			}
+		}
 	case "ld":
-		suffix = "_ld.flv"
+		for _, value := range room.FlvStreamUrls {
+			if strings.Contains(value, "_ld") {
+				url = value
+				break
+			}
+		}
 	case "sd":
-		suffix = "_sd.flv"
-	}
-	if suffix != "" && strings.HasSuffix(url, hdSuffix) {
-		newUrl := room.StreamUrl[0:len(url)-len(hdSuffix)] + suffix
-		url = newUrl
+		for _, value := range room.FlvStreamUrls {
+			if strings.Contains(value, "_sd") {
+				url = value
+				break
+			}
+		}
 	}
 
 	switch cmdType {
