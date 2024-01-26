@@ -33,7 +33,7 @@ type (
 
 // GetCategories gets all Douyin live stream categories.
 func GetCategories(ctx context.Context) ([]Category, error) {
-	const first = "1_4609"
+	const first = "1_1"
 	var cats []Category
 	var subCats []Category
 	err := getCategories(ctx, first, &cats, &subCats)
