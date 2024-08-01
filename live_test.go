@@ -48,3 +48,16 @@ func TestGetRoomsByCategory(t *testing.T) {
 		e.Encode(rooms[0:1])
 	}
 }
+
+func TestGetRoom(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	room, err := GetRoom(ctx, "maidanglaodo")
+	if err != nil {
+		t.Error(err)
+	}
+	e := json.NewEncoder(os.Stdout)
+	e.SetIndent("", "  ")
+	e.SetEscapeHTML(false)
+	e.Encode(room)
+}

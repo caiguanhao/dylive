@@ -11,7 +11,7 @@ import (
 	"sync"
 )
 
-const userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1"
+const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
 
 type (
 	Category struct {
@@ -102,7 +102,7 @@ type (
 		WebUrl            string
 		CurrentUsersCount string
 		TotalUsersCount   string
-		Category          Category
+		Category          *Category
 		User              User
 		StreamUrl         string
 		FlvStreamUrls     map[string]string
@@ -114,30 +114,42 @@ type (
 		Picture string
 	}
 
+	dyUser struct {
+		Nickname    string `json:"nickname"`
+		AvatarThumb struct {
+			UrlList []string `json:"url_list"`
+		} `json:"avatar_thumb"`
+	}
+
+	dyliveRoom struct {
+		Title  string `json:"title"`
+		Status int    `json:"status"`
+		Cover  struct {
+			UrlList []string `json:"url_list"`
+		} `json:"cover"`
+		Stats struct {
+			TotalUserStr string `json:"total_user_str"`
+			UserCountStr string `json:"user_count_str"`
+		} `json:"stats"`
+		Owner     dyUser `json:"owner"`
+		StreamUrl struct {
+			FlvPullUrl        map[string]string `json:"flv_pull_url"`
+			HlsPullUrlMap     map[string]string `json:"hls_pull_url_map"`
+			DefaultResolution string            `json:"default_resolution"`
+		} `json:"stream_url"`
+		RoomViewStats struct {
+			DisplayValue int `json:"display_value"`
+		} `json:"room_view_stats"`
+	}
+
 	dyliveCategory struct {
 		RoomsData struct {
 			Data []struct {
-				Room struct {
-					Title string `json:"title"`
-					Stats struct {
-						TotalUserStr string `json:"total_user_str"`
-						UserCountStr string `json:"user_count_str"`
-					} `json:"stats"`
-					Owner struct {
-						Nickname string `json:"nickname"`
-					} `json:"owner"`
-					StreamUrl struct {
-						FlvPullUrl    map[string]string `json:"flv_pull_url"`
-						HlsPullUrlMap map[string]string `json:"hls_pull_url_map"`
-					} `json:"stream_url"`
-					RoomViewStats struct {
-						DisplayValue int `json:"display_value"`
-					} `json:"room_view_stats"`
-				} `json:"room"`
-				WebRid    string `json:"web_rid"`
-				StreamSrc string `json:"streamSrc"`
-				Cover     string `json:"cover"`
-				Avatar    string `json:"avatar"`
+				Room      dyliveRoom `json:"room"`
+				WebRid    string     `json:"web_rid"`
+				StreamSrc string     `json:"streamSrc"`
+				Cover     string     `json:"cover"`
+				Avatar    string     `json:"avatar"`
 			} `json:"data"`
 		} `json:"roomsData"`
 		PartitionData struct {
@@ -191,7 +203,7 @@ func GetRoomsByCategory(ctx context.Context, categoryId string) ([]Room, error) 
 			HlsStreamUrls:     room.Room.StreamUrl.HlsPullUrlMap,
 			CurrentUsersCount: count,
 			TotalUsersCount:   room.Room.Stats.TotalUserStr,
-			Category: Category{
+			Category: &Category{
 				Id:   fmt.Sprintf("%d_%s", p.Type, p.IDStr),
 				Name: p.Title,
 				Categories: []Category{
@@ -216,6 +228,107 @@ func getCategoryPageData(ctx context.Context, id string, filters ...string) ([]s
 		return nil, err
 	}
 	req.Header.Set("User-Agent", userAgent)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	parts := getDataInHtml(string(b))
+	var output []string
+	for _, filter := range filters {
+		var ret string
+		for _, part := range parts {
+			if strings.Contains(part, filter) {
+				ret = part
+				break
+			}
+		}
+		output = append(output, ret)
+	}
+	return output, nil
+}
+
+type (
+	dyliveRoomDetails struct {
+		State struct {
+			RoomStore struct {
+				RoomInfo struct {
+					Room   dyliveRoom `json:"room"`
+					WebRid string     `json:"web_rid"`
+					Anchor dyUser     `json:"anchor"`
+				} `json:"roomInfo"`
+			} `json:"roomStore"`
+		} `json:"state"`
+	}
+)
+
+// GetRoom get live stream room details by Douyin ID (抖音号)
+func GetRoom(ctx context.Context, douyinId string) (*Room, error) {
+	data, err := getLivePageData(ctx, douyinId, "roomId")
+	if err != nil {
+		return nil, err
+	}
+	roomsData := data[0]
+	var page dyliveRoomDetails
+	if err := getDataInArray(roomsData, &page); err != nil {
+		return nil, err
+	}
+
+	info := page.State.RoomStore.RoomInfo
+
+	var cover string
+	if len(info.Room.Cover.UrlList) > 0 {
+		cover = info.Room.Cover.UrlList[0]
+	}
+
+	streamUrl := info.Room.StreamUrl.FlvPullUrl[info.Room.StreamUrl.DefaultResolution]
+
+	var count string
+	if info.Room.RoomViewStats.DisplayValue > 0 {
+		count = strconv.Itoa(info.Room.RoomViewStats.DisplayValue)
+	} else {
+		count = info.Room.Stats.UserCountStr
+	}
+
+	userName := info.Room.Owner.Nickname
+	if userName == "" {
+		userName = info.Anchor.Nickname
+	}
+
+	var userPicture string
+	if len(info.Room.Owner.AvatarThumb.UrlList) > 0 {
+		userPicture = info.Room.Owner.AvatarThumb.UrlList[0]
+	} else if len(info.Anchor.AvatarThumb.UrlList) > 0 {
+		userPicture = info.Anchor.AvatarThumb.UrlList[0]
+	}
+
+	return &Room{
+		Name:              info.Room.Title,
+		CoverUrl:          cover,
+		WebUrl:            "https://live.douyin.com/" + info.WebRid,
+		StreamUrl:         streamUrl,
+		FlvStreamUrls:     info.Room.StreamUrl.FlvPullUrl,
+		HlsStreamUrls:     info.Room.StreamUrl.HlsPullUrlMap,
+		CurrentUsersCount: count,
+		TotalUsersCount:   info.Room.Stats.TotalUserStr,
+		User: User{
+			Name:    userName,
+			Picture: userPicture,
+		},
+	}, nil
+}
+
+func getLivePageData(ctx context.Context, douyinId string, filters ...string) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://live.douyin.com/"+douyinId, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Cookie", "__ac_nonce=064caded4009deafd8b89")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
