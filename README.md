@@ -1,16 +1,24 @@
 # dylive
 
-Utility to watch Douyin live streams. 观看抖音直播工具
+Utilities to watch Douyin live streams. 观看抖音直播工具
+
+## dywatch
+
+Watch for new douyin live stream.
+
+```
+go install -v github.com/caiguanhao/dylive/dywatch@latest
+```
+
+```
+# Record live stream
+dywatch -q uhd -run 'mkdir -p "{{.User.Name}}" && ffmpeg -i "{{.StreamUrl}}" -y -c copy "{{.User.Name}}/{{.Id}}.flv"' hongjingmayi maidanglaodo
+```
+
+## dylive
 
 - Use keyboard or mouse to navigate different categories.
 - Select multiple live stream rooms and open them at once.
-
----
-
-NOTE: Due to new [regulation](https://www.reuters.com/world/china/chinas-broadcasting-regulator-ban-livestreaming-games-without-approval-2022-04-15/),
-Douyin.com has removed many online game live broadcasting categories on April 16, 2022.
-
----
 
 To install:
 
@@ -28,9 +36,9 @@ Preview:
 
 https://user-images.githubusercontent.com/1284703/147945918-a20c6c96-88d7-46b6-834e-1650b8033605.mp4
 
-## Usage
+### Usage
 
-### Video player
+#### Video player
 
 By default, dylive uses mpv. If mpv does not exist, IINA and then VLC will be
 used. If you have installed video player in a different location, set the
@@ -47,7 +55,7 @@ PLAYER=/Applications/IINA.app/Contents/MacOS/iina-cli dylive
 PLAYER=/Applications/OPlayer\ Lite.app dylive
 ```
 
-### Video player arguments
+#### Video player arguments
 
 You can add extra video player command arguments after dylive like this:
 
@@ -58,7 +66,7 @@ dylive -- --mute=yes
 
 See [mpv's options](https://mpv.io/manual/master/#options).
 
-### Record while playing
+#### Record while playing
 
 Use mpv's `--stream-record` option to save live stream to file.
 
