@@ -95,8 +95,19 @@ func getCategories(ctx context.Context, id string, categories, subCategories *[]
 	return nil
 }
 
+const (
+	RoomStatusLiveOn RoomStatus = 2 + iota
+	_
+	RoomStatusLiveOff
+)
+
 type (
+	RoomStatus = int
+
 	Room struct {
+		Id                string
+		DouyinId          string
+		StatusCode        RoomStatus
 		Name              string
 		CoverUrl          string
 		WebUrl            string
@@ -122,6 +133,7 @@ type (
 	}
 
 	dyliveRoom struct {
+		IdStr  string `json:"id_str"`
 		Title  string `json:"title"`
 		Status int    `json:"status"`
 		Cover  struct {
@@ -172,6 +184,45 @@ type (
 	}
 )
 
+// FlvUrlForQuality returns the .flv stream URL for the given quality (uhd, hd, ld, sd).
+// If no matching URL is found, it returns the room's default StreamUrl.
+func (room Room) FlvUrlForQuality(quality string) string {
+	return room.urlForQuality(room.FlvStreamUrls, quality)
+}
+
+// HlsUrlForQuality returns the .m3u8 stream URL for the given quality (uhd, hd, ld, sd).
+// If no matching URL is found, it returns the room's default StreamUrl.
+func (room Room) HlsUrlForQuality(quality string) string {
+	return room.urlForQuality(room.HlsStreamUrls, quality)
+}
+
+func (room Room) urlForQuality(urls map[string]string, quality string) string {
+	quality = strings.ToLower(quality)
+	for key, value := range urls {
+		switch quality {
+		case "uhd":
+			if strings.Contains(key, "FULL_HD") || strings.Contains(value, "_uhd") {
+				return value
+			}
+		case "hd":
+			if strings.Contains(value, "_hd") {
+				return value
+			}
+		case "ld":
+			if strings.Contains(value, "_ld") {
+				return value
+			}
+		case "sd":
+			if strings.Contains(value, "_sd") {
+				return value
+			}
+		default:
+			return room.StreamUrl
+		}
+	}
+	return room.StreamUrl
+}
+
 // GetRoomsByCategory gets top 15 Douyin live stream rooms of a category.
 func GetRoomsByCategory(ctx context.Context, categoryId string) ([]Room, error) {
 	data, err := getCategoryPageData(ctx, categoryId, "roomsData")
@@ -195,6 +246,9 @@ func GetRoomsByCategory(ctx context.Context, categoryId string) ([]Room, error) 
 			count = room.Room.Stats.UserCountStr
 		}
 		rooms = append(rooms, Room{
+			Id:                room.Room.IdStr,
+			DouyinId:          room.WebRid,
+			StatusCode:        RoomStatusLiveOn,
 			Name:              room.Room.Title,
 			CoverUrl:          room.Cover,
 			WebUrl:            "https://live.douyin.com/" + room.WebRid,
@@ -272,6 +326,9 @@ func GetRoom(ctx context.Context, douyinId string) (*Room, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(data) == 0 || data[0] == "" {
+		return nil, fmt.Errorf("DouyinId %s does not exist", douyinId)
+	}
 	roomsData := data[0]
 	var page dyliveRoomDetails
 	if err := getDataInArray(roomsData, &page); err != nil {
@@ -307,6 +364,9 @@ func GetRoom(ctx context.Context, douyinId string) (*Room, error) {
 	}
 
 	return &Room{
+		Id:                info.Room.IdStr,
+		DouyinId:          info.WebRid,
+		StatusCode:        info.Room.Status,
 		Name:              info.Room.Title,
 		CoverUrl:          cover,
 		WebUrl:            "https://live.douyin.com/" + info.WebRid,
