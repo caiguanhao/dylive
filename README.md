@@ -11,6 +11,9 @@ go install -v github.com/caiguanhao/dylive/dywatch@latest
 ```
 
 ```
+# This opens mpv.app on macOS for new live stream
+dywatch -q uhd hongjingmayi maidanglaodo | xargs -n1 open -na mpv
+
 # Record live stream
 dywatch -q uhd -run 'mkdir -p "{{.User.Name}}" && ffmpeg -i "{{.StreamUrl}}" -y -c copy "{{.User.Name}}/{{.Id}}.flv"' hongjingmayi maidanglaodo
 ```

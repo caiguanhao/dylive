@@ -558,31 +558,7 @@ func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
 		}
 	}
 
-	url := room.StreamUrl
-
-	switch preferQuality {
-	case "uhd":
-		for key, value := range room.FlvStreamUrls {
-			if strings.Contains(key, "FULL_HD") || strings.Contains(value, "_uhd") {
-				url = value
-				break
-			}
-		}
-	case "ld":
-		for _, value := range room.FlvStreamUrls {
-			if strings.Contains(value, "_ld") {
-				url = value
-				break
-			}
-		}
-	case "sd":
-		for _, value := range room.FlvStreamUrls {
-			if strings.Contains(value, "_sd") {
-				url = value
-				break
-			}
-		}
-	}
+	url := room.FlvUrlForQuality(preferQuality)
 
 	switch cmdType {
 	case "mpv":
