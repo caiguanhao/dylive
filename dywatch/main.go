@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"text/template"
 	"time"
 
@@ -17,10 +18,12 @@ import (
 
 var (
 	currentRooms = map[string]string{}
+	pids         = map[string]int{}
 
 	preferQuality, preferFormat string
 	outputJson                  bool
 	commadnTemplate             string
+	checkCommand                bool
 )
 
 func main() {
@@ -28,6 +31,7 @@ func main() {
 	flag.StringVar(&preferFormat, "f", "flv", "format (flv, hls, m3u8)")
 	flag.BoolVar(&outputJson, "json", false, "output json instead of url")
 	flag.StringVar(&commadnTemplate, "run", "", "command template to run; use @/path/to/template.sh to specify a template file")
+	flag.BoolVar(&checkCommand, "check", false, "re-run command if process does not exist")
 	flag.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), "Monitor live streams from Douyin.")
 		fmt.Fprintln(flag.CommandLine.Output())
@@ -56,6 +60,13 @@ func getRoom() {
 			continue
 		}
 		if currentRooms[id] == room.Id {
+			if checkCommand && room.StatusCode == dylive.RoomStatusLiveOn && pids[room.Id] > 0 && !isProcessRunning(pids[room.Id]) {
+				log.Println("Process", pids[room.Id], "exited, restart")
+				updateStreamUrl(room)
+				if err := runCommand(commadnTemplate, room); err != nil {
+					log.Println(err)
+				}
+			}
 			continue
 		}
 		currentRooms[id] = room.Id
@@ -64,11 +75,7 @@ func getRoom() {
 			continue
 		}
 		log.Printf("%s (%s) is live.", room.User.Name, room.DouyinId)
-		if preferFormat == "hls" || preferFormat == "m3u8" {
-			room.StreamUrl = room.HlsUrlForQuality(preferQuality)
-		} else {
-			room.StreamUrl = room.FlvUrlForQuality(preferQuality)
-		}
+		updateStreamUrl(room)
 		if outputJson {
 			json.NewEncoder(os.Stdout).Encode(room)
 		} else {
@@ -79,6 +86,14 @@ func getRoom() {
 				log.Println(err)
 			}
 		}
+	}
+}
+
+func updateStreamUrl(room *dylive.Room) {
+	if preferFormat == "hls" || preferFormat == "m3u8" {
+		room.StreamUrl = room.HlsUrlForQuality(preferQuality)
+	} else {
+		room.StreamUrl = room.FlvUrlForQuality(preferQuality)
 	}
 }
 
@@ -95,7 +110,13 @@ func runCommand(tpl string, room *dylive.Room) error {
 		return err
 	}
 	var cmdStrBuilder strings.Builder
-	err = tmpl.Execute(&cmdStrBuilder, room)
+	err = tmpl.Execute(&cmdStrBuilder, struct {
+		*dylive.Room
+		Timestamp int64
+	}{
+		Room:      room,
+		Timestamp: time.Now().Unix(),
+	})
 	if err != nil {
 		return err
 	}
@@ -103,7 +124,31 @@ func runCommand(tpl string, room *dylive.Room) error {
 	if cmdStr == "" {
 		return nil
 	}
-	log.Println("Running command", cmdStr)
 	cmd := exec.Command("sh", "-c", cmdStr)
-	return cmd.Start()
+	err = cmd.Start()
+	if err == nil {
+		log.Println("Command", cmdStr, "started as PID", cmd.Process.Pid)
+		pids[room.Id] = cmd.Process.Pid
+		go func() {
+			err := cmd.Wait()
+			if err != nil {
+				log.Printf("Process %d exited with error: %s\n", cmd.Process.Pid, err)
+			} else {
+				log.Printf("Process %d exited successfully\n", cmd.Process.Pid)
+			}
+		}()
+	}
+	return err
+}
+
+func isProcessRunning(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	if err != nil {
+		return false
+	}
+	return true
 }
