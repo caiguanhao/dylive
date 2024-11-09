@@ -322,7 +322,7 @@ type (
 
 // GetRoom get live stream room details by Douyin ID (抖音号)
 func GetRoom(ctx context.Context, douyinId string) (*Room, error) {
-	data, err := getLivePageData(ctx, douyinId, "roomId")
+	data, err := getLivePageData(ctx, douyinId, "flv_pull_url")
 	if err != nil {
 		return nil, err
 	}
