@@ -254,6 +254,32 @@ func getCategories() {
 		go showError(err)
 		return
 	}
+
+	gameIdx := -1
+	for i, c := range categories {
+		if c.Name == "游戏" {
+			gameIdx = i
+			break
+		}
+	}
+	if gameIdx != -1 {
+		game := categories[gameIdx]
+		others := make([]dylive.Category, 0, len(categories)-1)
+		for i, c := range categories {
+			if i == gameIdx {
+				continue
+			}
+			others = append(others, c)
+		}
+		newCategories := make([]dylive.Category, 0, len(game.Categories)+1)
+		newCategories = append(newCategories, game.Categories...)
+		newCategories = append(newCategories, dylive.Category{
+			Name:       "其他",
+			Categories: others,
+		})
+		categories = newCategories
+	}
+
 	go updateStatus("成功获取分类", 0)
 	app.QueueUpdateDraw(func() {
 		renderCategories()
