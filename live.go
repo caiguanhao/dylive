@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
@@ -20,79 +19,65 @@ type (
 		Categories []Category
 	}
 
+	dyCategory struct {
+		Partition struct {
+			IDStr string `json:"id_str"`
+			Type  int    `json:"type"`
+			Title string `json:"title"`
+		} `json:"partition"`
+		SubPartition []dyCategory `json:"sub_partition"`
+	}
+
 	dyliveCategories struct {
-		CategoryData []struct {
-			Partition struct {
-				IDStr string `json:"id_str"`
-				Type  int    `json:"type"`
-				Title string `json:"title"`
-			} `json:"partition"`
-		} `json:"categoryData"`
+		CategoryData []dyCategory `json:"categoryData"`
 	}
 )
 
 // GetCategories gets all Douyin live stream categories.
 func GetCategories(ctx context.Context) ([]Category, error) {
-	const first = "1_1"
-	var cats []Category
-	var subCats []Category
-	err := getCategories(ctx, first, &cats, &subCats)
+	const first = "4_101"
+	var categories []Category
+	data, err := getCategoryPageData(ctx, first, "categoryData")
 	if err != nil {
 		return nil, err
 	}
-	var wg sync.WaitGroup
-	for i := range cats {
-		if cats[i].Id == first {
-			cats[i].Categories = subCats
-		} else {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
-				var subCats []Category
-				getCategories(ctx, cats[i].Id, nil, &subCats)
-				cats[i].Categories = subCats
-			}(i)
-		}
+	var cats dyliveCategories
+	if err := getDataInArray(data[0], &cats); err != nil {
+		return nil, err
 	}
-	wg.Wait()
-	return cats, nil
+	categories = append(categories, deepConvertDyCategories(cats.CategoryData, nil)...)
+	return categories, nil
 }
 
-func getCategories(ctx context.Context, id string, categories, subCategories *[]Category) error {
-	if categories == nil && subCategories == nil {
+func deepConvertDyCategories(in []dyCategory, whitelist []string) []Category {
+	out := []Category{}
+	for _, c := range in {
+		if cat := convertDyCategory(c, nil, 0, whitelist); cat != nil {
+			out = append(out, *cat)
+		}
+	}
+	return out
+}
+
+func convertDyCategory(c dyCategory, parentIDParts []string, level int, whitelist []string) *Category {
+	id := fmt.Sprintf("%d_%s", c.Partition.Type, c.Partition.IDStr)
+	if len(whitelist) > 0 && (level >= len(whitelist) || whitelist[level] != id) {
 		return nil
 	}
-	data, err := getCategoryPageData(ctx, id, "categoryData", "partitionData")
-	if err != nil {
-		return err
-	}
-	categoryData, partitionData := data[0], data[1]
-	var cats dyliveCategories
-	if err := getDataInArray(categoryData, &cats); err != nil {
-		return err
-	}
-	var cat dyliveCategory
-	if err := getDataInArray(partitionData, &cat); err != nil {
-		return err
-	}
-	if categories != nil {
-		for _, cat := range cats.CategoryData {
-			*categories = append(*categories, Category{
-				Id:   fmt.Sprintf("%d_%s", cat.Partition.Type, cat.Partition.IDStr),
-				Name: cat.Partition.Title,
-			})
+	idParts := append([]string{}, parentIDParts...)
+	idParts = append(idParts, id)
+	fullId := strings.Join(idParts, "_")
+	children := []Category{}
+	for _, sub := range c.SubPartition {
+		if cat := convertDyCategory(sub, idParts, level+1, whitelist); cat != nil {
+			children = append(children, *cat)
 		}
 	}
-	if subCategories != nil {
-		p := cat.PartitionData.Partition
-		for _, cat := range cat.PartitionData.SubPartition {
-			*subCategories = append(*subCategories, Category{
-				Id:   fmt.Sprintf("%d_%s_%d_%s", p.Type, p.IDStr, cat.Type, cat.IDStr),
-				Name: cat.Title,
-			})
-		}
+	return &Category{
+		Id:         fullId,
+		Name:       c.Partition.Title,
+		Categories: children,
 	}
-	return nil
 }
 
 const (
@@ -164,23 +149,8 @@ type (
 				Avatar    string     `json:"avatar"`
 			} `json:"data"`
 		} `json:"roomsData"`
-		PartitionData struct {
-			Partition struct {
-				IDStr string `json:"id_str"`
-				Type  int    `json:"type"`
-				Title string `json:"title"`
-			} `json:"partition"`
-			SelectPartition struct {
-				IDStr string `json:"id_str"`
-				Type  int    `json:"type"`
-				Title string `json:"title"`
-			} `json:"select_partition"`
-			SubPartition []struct {
-				IDStr string `json:"id_str"`
-				Type  int    `json:"type"`
-				Title string `json:"title"`
-			} `json:"sub_partition"`
-		} `json:"partitionData"`
+		CategoryData []dyCategory `json:"categoryData"`
+		CategoryList []string     `json:"categoryList"`
 	}
 )
 
@@ -234,11 +204,13 @@ func GetRoomsByCategory(ctx context.Context, categoryId string) ([]Room, error) 
 	if err := getDataInArray(roomsData, &cat); err != nil {
 		return nil, err
 	}
+	var category *Category
+	if categories := deepConvertDyCategories(cat.CategoryData, cat.CategoryList); len(categories) > 0 {
+		category = &categories[0]
+	}
 
 	var rooms []Room
 	for _, room := range cat.RoomsData.Data {
-		p := cat.PartitionData.Partition
-		c := cat.PartitionData.SelectPartition
 		var count string
 		if room.Room.RoomViewStats.DisplayValue > 0 {
 			count = strconv.Itoa(room.Room.RoomViewStats.DisplayValue)
@@ -257,16 +229,7 @@ func GetRoomsByCategory(ctx context.Context, categoryId string) ([]Room, error) 
 			HlsStreamUrls:     room.Room.StreamUrl.HlsPullUrlMap,
 			CurrentUsersCount: count,
 			TotalUsersCount:   room.Room.Stats.TotalUserStr,
-			Category: &Category{
-				Id:   fmt.Sprintf("%d_%s", p.Type, p.IDStr),
-				Name: p.Title,
-				Categories: []Category{
-					{
-						Id:   fmt.Sprintf("%d_%s_%d_%s", p.Type, p.IDStr, c.Type, c.IDStr),
-						Name: c.Title,
-					},
-				},
-			},
+			Category:          category,
 			User: User{
 				Name:    room.Room.Owner.Nickname,
 				Picture: room.Avatar,
@@ -277,7 +240,7 @@ func GetRoomsByCategory(ctx context.Context, categoryId string) ([]Room, error) 
 }
 
 func getCategoryPageData(ctx context.Context, id string, filters ...string) ([]string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://live.douyin.com/category/"+id, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://live.douyin.com/categorynew/"+id, nil)
 	if err != nil {
 		return nil, err
 	}

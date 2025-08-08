@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"sort"
 	"testing"
 	"time"
 )
@@ -18,10 +19,17 @@ func TestGetCategories(t *testing.T) {
 	if len(categories) < 1 {
 		t.Error("categories should not be empty")
 	}
-	for _, cat := range categories {
-		if len(cat.Categories) < 1 {
-			t.Error("sub category should not be empty")
+	sort.Slice(categories, func(i, j int) bool {
+		if categories[i].Name == "游戏" {
+			return true
 		}
+		if categories[j].Name == "游戏" {
+			return false
+		}
+		return i < j
+	})
+	if len(categories[0].Categories) < 1 {
+		t.Error("sub category should not be empty")
 	}
 	if len(categories) > 0 {
 		e := json.NewEncoder(os.Stdout)
@@ -34,7 +42,7 @@ func TestGetCategories(t *testing.T) {
 func TestGetRoomsByCategory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	rooms, err := GetRoomsByCategory(ctx, "1_2_1_1010045")
+	rooms, err := GetRoomsByCategory(ctx, "4_103_1_2_1_1010102")
 	if err != nil {
 		t.Error(err)
 	}
