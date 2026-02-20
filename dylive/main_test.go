@@ -37,6 +37,22 @@ func Test_arrange(t *testing.T) {
 }
 
 func Test_mpvGeometry(t *testing.T) {
+	// Edge cases: size 0 and 1 should return empty string (no geometry needed)
+	if g := mpvGeometry(0, 0); g != "" {
+		t.Errorf(`mpvGeometry(0, 0) should be "" instead of %q`, g)
+	}
+	if g := mpvGeometry(0, 1); g != "" {
+		t.Errorf(`mpvGeometry(0, 1) should be "" instead of %q`, g)
+	}
+
+	// size=2 → arrange(2) = rows=1, cols=2; rows-1=0 must not cause division by zero
+	if g := mpvGeometry(0, 2); g != "50%+0%+0%" {
+		t.Errorf(`mpvGeometry(0, 2) should be "50%%+0%%+0%%" instead of %q`, g)
+	}
+	if g := mpvGeometry(1, 2); g != "50%+100%+0%" {
+		t.Errorf(`mpvGeometry(1, 2) should be "50%%+100%%+0%%" instead of %q`, g)
+	}
+
 	cases := [][]string{
 		{
 			"50%+0%+0%", "50%+100%+0%",

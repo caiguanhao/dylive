@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"os/exec"
@@ -80,6 +79,20 @@ var (
 const (
 	title     = "dylive"
 	extraKeys = `!@#$%^&*()-=[]\;',./_+{}|:"<>`
+
+	maxColumnWidth       = 30
+	clickDetectionWidth  = 4
+	multiRoomConfirmSize = 9
+	categoryNameGame     = "游戏"
+	categoryNameOther    = "其他"
+)
+
+var (
+	httpTimeout         = 5 * time.Second
+	doubleClickInterval = 300 * time.Millisecond
+	iinaOpenDelay       = 500 * time.Millisecond
+	mouseDebounce       = 100 * time.Millisecond
+	reloadDelay         = 500 * time.Millisecond
 )
 
 type config struct {
@@ -122,10 +135,10 @@ func main() {
 		timeFormat = tf
 	}
 
-	cfdata, _ := ioutil.ReadFile(*configFile)
-	json.Unmarshal(cfdata, &currentConfig)
+	cfdata, _ := os.ReadFile(*configFile)
+	_ = json.Unmarshal(cfdata, &currentConfig)
 
-	tview.DoubleClickInterval = 300 * time.Millisecond
+	tview.DoubleClickInterval = doubleClickInterval
 
 	app = tview.NewApplication()
 	app.EnableMouse(!*noMouse)
@@ -156,8 +169,8 @@ func main() {
 	grid.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
 		grid.SetRows(1, 0, 1)
 		w1 := w / 3
-		if w1 > 30 {
-			w1 = 30
+		if w1 > maxColumnWidth {
+			w1 = maxColumnWidth
 		}
 		grid.SetColumns(w1, 0)
 		return x, y, w, h
@@ -175,7 +188,9 @@ func main() {
 	}
 
 	cfdata, _ = json.MarshalIndent(currentConfig, "", "  ")
-	ioutil.WriteFile(*configFile, cfdata, 0644)
+	if err := os.WriteFile(*configFile, cfdata, 0644); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: failed to save config:", err)
+	}
 }
 
 func reset() {
@@ -191,20 +206,12 @@ func reset() {
 	if paneSubCatsLoading != nil {
 		grid.RemoveItem(paneSubCatsLoading)
 	}
-	paneSubCatsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
-	paneSubCatsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		y += h / 2
-		return x, y, w, h
-	})
+	paneSubCatsLoading = newLoadingView()
 
 	if paneRoomsLoading != nil {
 		grid.RemoveItem(paneRoomsLoading)
 	}
-	paneRoomsLoading = tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
-	paneRoomsLoading.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		y += h / 2
-		return x, y, w, h
-	})
+	paneRoomsLoading = newLoadingView()
 
 	categories = nil
 	renderCategories()
@@ -246,7 +253,7 @@ func createCategories() {
 
 func getCategories() {
 	go updateStatus("正在获取分类…", 0)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), httpTimeout)
 	defer cancel()
 	var err error
 	categories, err = dylive.GetCategories(ctx)
@@ -257,7 +264,7 @@ func getCategories() {
 
 	gameIdx := -1
 	for i, c := range categories {
-		if c.Name == "游戏" {
+		if c.Name == categoryNameGame {
 			gameIdx = i
 			break
 		}
@@ -274,7 +281,7 @@ func getCategories() {
 		newCategories := make([]dylive.Category, 0, len(game.Categories)+1)
 		newCategories = append(newCategories, game.Categories...)
 		newCategories = append(newCategories, dylive.Category{
-			Name:       "其他",
+			Name:       categoryNameOther,
 			Categories: others,
 		})
 		categories = newCategories
@@ -439,7 +446,7 @@ func getRooms() {
 		paneRooms.Clear()
 	}
 	go updateStatus(fmt.Sprintf("正在获取「%s」的直播列表…", currentSubCat.Name), 0)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), httpTimeout)
 	defer cancel()
 	var err error
 	rooms, err = dylive.GetRoomsByCategory(ctx, currentSubCat.Id)
@@ -486,7 +493,7 @@ func renderRooms() {
 }
 
 func selectRooms() {
-	if count := len(selectedRooms); count > 9 {
+	if count := len(selectedRooms); count > multiRoomConfirmSize {
 		modal := newModal()
 		modal.SetText(fmt.Sprintf("确定要打开 %d 个直播吗？", count)).
 			AddButtons([]string{
@@ -528,61 +535,32 @@ func roomsCommands() (cmds []string) {
 		if row < 0 || row >= len(rooms) {
 			return
 		}
-		cmds = append(cmds, selectRoom(rooms[row], 0, 1, true).String())
+		if cmd := selectRoom(rooms[row], 0, 1, true); cmd != nil {
+			cmds = append(cmds, cmd.String())
+		}
 		return
 	}
 	for i, room := range selectedRooms {
-		cmds = append(cmds, selectRoom(room, i, size, true).String())
+		if cmd := selectRoom(room, i, size, true); cmd != nil {
+			cmds = append(cmds, cmd.String())
+		}
 	}
 	return
 }
 
 func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
-	if lastEnterWithAlt == true {
-		var cmd *exec.Cmd
-		if isWindows {
-			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", room.WebUrl)
-		} else if commandExists("xdg-open") {
-			cmd = exec.Command("xdg-open", room.WebUrl)
-		} else {
-			cmd = exec.Command("open", room.WebUrl)
-		}
-		if noRun == false {
-			cmd.Start()
+	if lastEnterWithAlt {
+		cmd := openInBrowser(room.WebUrl)
+		if !noRun {
+			if err := cmd.Start(); err != nil {
+				go updateStatus("打开浏览器失败: "+err.Error(), 0)
+			}
 		}
 		return cmd
 	}
 
-	var cmdType, cmdName string
+	cmdType, cmdName := detectPlayer()
 	var cmd *exec.Cmd
-
-	player := os.Getenv("PLAYER")
-	if player == "" {
-		if commandExists("mpv") {
-			cmdType = "mpv"
-			cmdName = "mpv"
-		} else if commandExists("iina-cli") {
-			cmdType = "iina"
-			cmdName = "iina-cli"
-		} else if exists("/Applications/IINA.app") {
-			cmdType = "open"
-			cmdName = "IINA"
-		} else if exists("/Applications/VLC.app") {
-			cmdType = "open"
-			cmdName = "VLC"
-		}
-	} else {
-		cmdName = player
-		base := filepath.Base(player)
-		if base == "mpv" || base == "mpv.exe" {
-			cmdType = "mpv"
-		} else if base == "iina-cli" {
-			cmdType = "iina"
-		} else if strings.HasSuffix(base, ".app") && isDir(player) {
-			cmdType = "open"
-			cmdName = player
-		}
-	}
 
 	url := room.FlvUrlForQuality(preferQuality)
 
@@ -598,7 +576,7 @@ func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
 		args := []string{url, "--", "--force-media-title=" + room.User.Name}
 		if geometry := mpvGeometry(nth, total); geometry != "" {
 			args = append(args, "--geometry="+geometry)
-			time.Sleep(500 * time.Millisecond) // iina bug? open too fast will break
+			time.Sleep(iinaOpenDelay) // iina bug? open too fast will break
 		}
 		args = append(args, playerArgs(room, nth, total)...)
 		cmd = exec.Command(cmdName, args...)
@@ -613,8 +591,10 @@ func selectRoom(room dylive.Room, nth, total int, noRun bool) *exec.Cmd {
 		}
 	}
 
-	if noRun == false && cmd != nil {
-		cmd.Start()
+	if !noRun && cmd != nil {
+		if err := cmd.Start(); err != nil {
+			go updateStatus("启动播放器失败: "+err.Error(), 0)
+		}
 	}
 
 	return cmd
@@ -646,7 +626,7 @@ func playerArgs(room dylive.Room, nth, total int) (out []string) {
 
 func onRoomsClicked(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	when := event.When()
-	if when.Sub(lastMouseClick) < 100*time.Millisecond {
+	if when.Sub(lastMouseClick) < mouseDebounce {
 		return action, event
 	}
 	switch action {
@@ -661,7 +641,7 @@ func onRoomsClicked(action tview.MouseAction, event *tcell.EventMouse) (tview.Mo
 		return tview.MouseLeftClick, event
 	case tview.MouseLeftClick:
 		x, _ := event.Position()
-		if x-paneRoomsX < 4 { // click on number
+		if x-paneRoomsX < clickDetectionWidth { // click on number
 			go app.QueueUpdateDraw(func() {
 				row, _ := paneRooms.GetSelection()
 				if row < 0 || row >= len(rooms) {
@@ -812,7 +792,7 @@ func showError(err error) {
 			}).SetFocus(0).SetDoneFunc(func(index int, label string) {
 			pages.RemovePage("modal")
 			go app.QueueUpdateDraw(func() {
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(reloadDelay)
 				forceReload()
 			})
 		})
@@ -838,7 +818,7 @@ func newModal() *tview.Modal {
 }
 
 func editInEditor(f func(*os.File)) {
-	file, err := ioutil.TempFile("", "dylive")
+	file, err := os.CreateTemp("", "dylive")
 	if err != nil {
 		return
 	}
@@ -862,7 +842,7 @@ func editInEditor(f func(*os.File)) {
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 	}
-	cmd.Run()
+	_ = cmd.Run()
 }
 
 func invertSelection() {
@@ -935,6 +915,51 @@ func updateStatus(text string, wait time.Duration) {
 	statusChan <- status{text: text, wait: wait}
 }
 
+func newLoadingView() *tview.TextView {
+	tv := tview.NewTextView().SetText("正在载入…").SetTextAlign(tview.AlignCenter)
+	tv.SetDrawFunc(func(screen tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		y += h / 2
+		return x, y, w, h
+	})
+	return tv
+}
+
+func openInBrowser(url string) *exec.Cmd {
+	if isWindows {
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	} else if commandExists("xdg-open") {
+		return exec.Command("xdg-open", url)
+	}
+	return exec.Command("open", url)
+}
+
+func detectPlayer() (cmdType, cmdName string) {
+	player := os.Getenv("PLAYER")
+	if player == "" {
+		if commandExists("mpv") {
+			return "mpv", "mpv"
+		} else if commandExists("iina-cli") {
+			return "iina", "iina-cli"
+		} else if exists("/Applications/IINA.app") {
+			return "open", "IINA"
+		} else if exists("/Applications/VLC.app") {
+			return "open", "VLC"
+		}
+		return "", ""
+	}
+	cmdName = player
+	base := filepath.Base(player)
+	if base == "mpv" || base == "mpv.exe" {
+		cmdType = "mpv"
+	} else if base == "iina-cli" {
+		cmdType = "iina"
+	} else if strings.HasSuffix(base, ".app") && isDir(player) {
+		cmdType = "open"
+		cmdName = player
+	}
+	return
+}
+
 func exists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
@@ -959,7 +984,7 @@ func (s *selections) toggle(i dylive.Room) {
 	if s.has(i) {
 		n := selections{}
 		for _, a := range *s {
-			if a.User.Name != i.User.Name {
+			if a.Id != i.Id {
 				n = append(n, a)
 			}
 		}
@@ -971,7 +996,7 @@ func (s *selections) toggle(i dylive.Room) {
 
 func (s selections) has(i dylive.Room) bool {
 	for _, a := range s {
-		if a.User.Name == i.User.Name {
+		if a.Id == i.Id {
 			return true
 		}
 	}
@@ -1000,12 +1025,18 @@ func arrange(size int) (rows, cols int) {
 }
 
 func mpvGeometry(nth, size int) string {
-	if size == 0 {
+	if size <= 1 {
 		return ""
 	}
 	rows, cols := arrange(size)
-	cp := int(math.Floor(100 / float64(cols-1)))
-	rp := int(math.Floor(100 / float64(rows-1)))
+	cp := 0
+	if cols > 1 {
+		cp = int(math.Floor(100 / float64(cols-1)))
+	}
+	rp := 0
+	if rows > 1 {
+		rp = int(math.Floor(100 / float64(rows-1)))
+	}
 	w := int(math.Floor(100 / float64(cols)))
 	x := nth % cols * cp
 	y := nth / cols * rp
