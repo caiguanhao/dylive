@@ -261,7 +261,6 @@ func getCategoryPageData(ctx context.Context, id string, filters ...string) ([]s
 		for _, part := range parts {
 			if strings.Contains(part, filter) {
 				ret = part
-				break
 			}
 		}
 		output = append(output, ret)
@@ -368,7 +367,6 @@ func getLivePageData(ctx context.Context, douyinId string, filters ...string) ([
 		for _, part := range parts {
 			if strings.Contains(part, filter) {
 				ret = part
-				break
 			}
 		}
 		output = append(output, ret)

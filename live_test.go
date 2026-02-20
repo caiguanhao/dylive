@@ -14,10 +14,10 @@ func TestGetCategories(t *testing.T) {
 	defer cancel()
 	categories, err := GetCategories(ctx)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if len(categories) < 1 {
-		t.Error("categories should not be empty")
+		t.Fatal("categories should not be empty")
 	}
 	sort.Slice(categories, func(i, j int) bool {
 		if categories[i].Name == "游戏" {
@@ -31,12 +31,10 @@ func TestGetCategories(t *testing.T) {
 	if len(categories[0].Categories) < 1 {
 		t.Error("sub category should not be empty")
 	}
-	if len(categories) > 0 {
-		e := json.NewEncoder(os.Stdout)
-		e.SetIndent("", "  ")
-		e.SetEscapeHTML(false)
-		e.Encode(categories[0:1])
-	}
+	e := json.NewEncoder(os.Stdout)
+	e.SetIndent("", "  ")
+	e.SetEscapeHTML(false)
+	e.Encode(categories[0:1])
 }
 
 func TestGetRoomsByCategory(t *testing.T) {
